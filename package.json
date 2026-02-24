@@ -1,0 +1,52 @@
+{
+  "name": "cueclaw",
+  "version": "0.0.1",
+  "description": "Orchestrate agent workflows with natural language. Natural language in, executable DAG out.",
+  "type": "module",
+  "bin": {
+    "cueclaw": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "workflow",
+    "orchestrator",
+    "claude",
+    "dag",
+    "natural-language",
+    "automation"
+  ],
+  "author": "memodb-io",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/memodb-io/cueclaw.git"
+  },
+  "bugs": {
+    "url": "https://github.com/memodb-io/cueclaw/issues"
+  },
+  "homepage": "https://github.com/memodb-io/cueclaw#readme",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

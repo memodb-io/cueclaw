@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+container/agent-runner/dist/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test
+coverage/
+
+# pnpm
+.pnpm-debug.log
+
+# Docker
+container/agent-runner/node_modules/
+
+# CueClaw runtime data
+.cueclaw/
