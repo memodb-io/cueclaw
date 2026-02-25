@@ -4,7 +4,7 @@ Orchestrate agent workflows with natural language. Uses the Claude Agent SDK to 
 
 ## Project Status
 
-Planning phase — no source code yet.
+MVP implemented (Phases 0-6). 119 tests passing across 19 test files.
 
 ## Key Concepts
 
@@ -50,3 +50,12 @@ User (TUI / WhatsApp / Telegram)
 - DB tests use `Database(':memory:')`, never touch the filesystem
 - LLM generates `PlannerOutput` (no framework fields), framework wraps into `Workflow`
 - Channel interface includes `sendConfirmation()` — each channel renders confirmation differently
+
+## Release Process
+
+- Uses [changesets](https://github.com/changesets/changesets) for versioning and npm publishing
+- **When to add a changeset**: PRs that affect published code (features, fixes, API changes)
+- **When NOT needed**: docs, CI config, tests-only, internal refactors
+- Developer workflow: run `pnpm changeset` before submitting PR, select patch/minor/major, write summary
+- CI creates a "Version Packages" PR that bumps package.json + generates CHANGELOG.md
+- Merging the Version PR triggers automatic `npm publish` + git tag
