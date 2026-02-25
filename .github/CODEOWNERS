@@ -1,0 +1,6 @@
+# Default owners for everything
+* @memodb-io/core
+
+# CI and release config
+.github/ @memodb-io/core
+.changeset/ @memodb-io/core
