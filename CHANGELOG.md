@@ -1,5 +1,11 @@
 # cueclaw
 
+## 0.0.4
+
+### Patch Changes
+
+- bc06eca: CI: release workflow now triggers only after CI passes via workflow_run
+
 ## 0.0.3
 
 ### Patch Changes
