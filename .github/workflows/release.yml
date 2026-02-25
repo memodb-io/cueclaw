@@ -42,7 +42,7 @@ jobs:
         run: |
           for pkg in $(echo '${{ steps.changesets.outputs.publishedPackages }}' | jq -r '.[] | "\(.name)@\(.version)"'); do
             version="${pkg#*@}"
-            gh release create "v${version}" --generate-notes --title "v${version}"
+            gh release create "v${version}" --tag "v${version}" --generate-notes --title "v${version}" --verify-tag
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
