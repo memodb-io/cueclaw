@@ -59,3 +59,4 @@ User (TUI / WhatsApp / Telegram)
 - Developer workflow: run `pnpm changeset` before submitting PR, select patch/minor/major, write summary
 - CI creates a "Version Packages" PR that bumps package.json + generates CHANGELOG.md
 - Merging the Version PR triggers automatic `npm publish` + git tag
+- npm authentication uses OIDC Trusted Publishing (no NPM_TOKEN needed), requires configuring Trusted Publisher on npmjs.com
