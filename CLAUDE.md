@@ -58,12 +58,28 @@ User (TUI / WhatsApp / Telegram)
 - Enforced by commitlint via git hook (simple-git-hooks)
 - After cloning, run `pnpm install` to set up hooks automatically
 
-## Release Process
+## CI / CD
 
-- Uses [changesets](https://github.com/changesets/changesets) for versioning and npm publishing
-- **When to add a changeset**: PRs that affect published code (features, fixes, API changes)
-- **When NOT needed**: docs, CI config, tests-only, internal refactors
-- Developer workflow: run `pnpm changeset` before submitting PR, select patch/minor/major, write summary
-- CI creates a "Version Packages" PR that bumps package.json + generates CHANGELOG.md
-- Merging the Version PR triggers automatic `npm publish` + git tag
-- npm authentication uses OIDC Trusted Publishing (no NPM_TOKEN needed), requires configuring Trusted Publisher on npmjs.com
+### CI (`ci.yml`)
+
+Runs on every push to `main` and all PRs — 4 parallel jobs:
+- **test**: build + `vitest run`
+- **lint**: `eslint`
+- **typecheck**: `tsc --noEmit`
+- **changeset**: PR-only, warns if changeset is missing (non-blocking)
+
+### Release (`release.yml`)
+
+Runs on push to `main` only. Uses [changesets](https://github.com/changesets/changesets) for versioning and npm publishing.
+
+**Flow**:
+1. PR with `.changeset/*.md` file merged to `main`
+2. Release workflow runs → `changesets/action` detects pending changesets → creates "Version Packages" PR (bumps `package.json`, updates `CHANGELOG.md`, deletes changeset files)
+3. Merge the Version PR → Release workflow runs again → `changeset publish` publishes to npm + creates git tag + GitHub Release automatically
+4. If no pending changesets exist, the workflow is a no-op
+
+**When to add a changeset**: PRs that affect published code (features, fixes, API changes)
+**When NOT needed**: docs, CI config, tests-only, internal refactors
+**Developer workflow**: run `pnpm changeset` before submitting PR, select patch/minor/major, write summary
+
+**Auth**: npm OIDC Trusted Publishing (no NPM_TOKEN)
