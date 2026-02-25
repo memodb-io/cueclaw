@@ -1,6 +1,6 @@
 {
   "name": "cueclaw",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Orchestrate agent workflows with natural language. Natural language in, executable DAG out.",
   "type": "module",
   "bin": {
