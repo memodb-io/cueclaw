@@ -29,9 +29,20 @@ jobs:
 
       - name: Create Release PR or Publish
         uses: changesets/action@v1
+        id: changesets
         with:
           publish: pnpm changeset publish
           title: "chore: version packages"
           commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          for pkg in $(echo '${{ steps.changesets.outputs.publishedPackages }}' | jq -r '.[] | "\(.name)@\(.version)"'); do
+            version="${pkg#*@}"
+            gh release create "v${version}" --generate-notes --title "v${version}"
+          done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
