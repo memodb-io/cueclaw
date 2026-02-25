@@ -58,9 +58,22 @@ export function runAgent(opts: {
   let aborted = false
 
   const resultPromise = (async (): Promise<StepRunResult> => {
+    // Set executor-specific env vars for the Claude Code subprocess
+    const authToken = config.claude.executor.api_key ?? config.claude.api_key
+    const baseUrl = config.claude.executor.base_url ?? config.claude.base_url
+    const prevAuthToken = process.env['ANTHROPIC_AUTH_TOKEN']
+    const prevBaseUrl = process.env['ANTHROPIC_BASE_URL']
+    process.env['ANTHROPIC_AUTH_TOKEN'] = authToken
+    if (baseUrl !== 'https://api.anthropic.com') {
+      process.env['ANTHROPIC_BASE_URL'] = baseUrl
+    }
+
     try {
       // Dynamic import to allow mocking in tests
       const { query } = await import('@anthropic-ai/claude-agent-sdk')
+
+      const permMode = config.claude.executor.skip_permissions
+        ? 'dangerously-skip-permissions' : 'default'
 
       const q = query({
         prompt: opts.prompt,
@@ -73,7 +86,7 @@ export function runAgent(opts: {
             'WebSearch', 'WebFetch',
           ],
           settingSources: ['project'],
-          permissionMode: 'default',
+          permissionMode: permMode,
         },
       })
 
@@ -120,6 +133,12 @@ export function runAgent(opts: {
       const errorMsg = err instanceof Error ? err.message : String(err)
       logger.error({ err, stepId: opts.stepId }, 'Agent execution failed')
       return { status: 'failed', error: errorMsg }
+    } finally {
+      // Restore previous env vars
+      if (prevAuthToken !== undefined) process.env['ANTHROPIC_AUTH_TOKEN'] = prevAuthToken
+      else delete process.env['ANTHROPIC_AUTH_TOKEN']
+      if (prevBaseUrl !== undefined) process.env['ANTHROPIC_BASE_URL'] = prevBaseUrl
+      else delete process.env['ANTHROPIC_BASE_URL']
     }
   })()
 

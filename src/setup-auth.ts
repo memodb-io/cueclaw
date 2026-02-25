@@ -3,7 +3,10 @@ import type { CueclawConfig } from './config.js'
 
 export async function validateAuth(config: CueclawConfig): Promise<{ valid: boolean; error?: string }> {
   try {
-    const client = new Anthropic({ apiKey: config.claude.api_key })
+    const client = new Anthropic({
+      apiKey: config.claude.api_key,
+      baseURL: config.claude.base_url,
+    })
     await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 10,

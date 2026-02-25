@@ -10,9 +10,14 @@ import { ConfigError } from './types.js'
 const ConfigSchema = z.object({
   claude: z.object({
     api_key: z.string(),
-    base_url: z.string().url().default('https://api.anthropic.com'),
+    base_url: z.url().default('https://api.anthropic.com'),
     planner: z.object({ model: z.string().default('claude-sonnet-4-6') }).default({ model: 'claude-sonnet-4-6' }),
-    executor: z.object({ model: z.string().default('claude-sonnet-4-6') }).default({ model: 'claude-sonnet-4-6' }),
+    executor: z.object({
+      model: z.string().default('claude-sonnet-4-6'),
+      api_key: z.string().optional(),
+      base_url: z.url().optional(),
+      skip_permissions: z.boolean().default(false),
+    }).default({ model: 'claude-sonnet-4-6', skip_permissions: false }),
   }),
   identity: z.object({ name: z.string() }).optional(),
   whatsapp: z.object({

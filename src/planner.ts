@@ -140,7 +140,10 @@ export async function generatePlan(
   userDescription: string,
   config: CueclawConfig,
 ): Promise<Workflow> {
-  const anthropic = new Anthropic({ apiKey: config.claude.api_key })
+  const anthropic = new Anthropic({
+    apiKey: config.claude.api_key,
+    baseURL: config.claude.base_url,
+  })
   const MAX_RETRIES = 2
   let retryContext = ''
 
