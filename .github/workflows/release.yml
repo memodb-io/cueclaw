@@ -1,13 +1,16 @@
 name: Release
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   release:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,7 +28,6 @@ jobs:
       - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: pnpm vitest run
 
       - name: Create Release PR or Publish
         uses: changesets/action@v1
