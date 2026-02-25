@@ -51,6 +51,13 @@ User (TUI / WhatsApp / Telegram)
 - LLM generates `PlannerOutput` (no framework fields), framework wraps into `Workflow`
 - Channel interface includes `sendConfirmation()` — each channel renders confirmation differently
 
+## Commit Convention
+
+- Follows [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): description`
+- Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`
+- Enforced by commitlint via git hook (simple-git-hooks)
+- After cloning, run `pnpm install` to set up hooks automatically
+
 ## Release Process
 
 - Uses [changesets](https://github.com/changesets/changesets) for versioning and npm publishing
