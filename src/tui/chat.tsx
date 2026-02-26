@@ -1,7 +1,99 @@
-import React, { useState, useMemo } from 'react'
-import { Box, Text, useStdout } from 'ink'
-import { TextInput, Spinner, useComponentTheme, type ComponentTheme } from '@inkjs/ui'
+import React, { useState, useMemo, useReducer, useEffect, useRef } from 'react'
+import { Box, Text, useStdout, useInput } from 'ink'
+import { Spinner, useComponentTheme, type ComponentTheme } from '@inkjs/ui'
 import { getCommands } from './commands.js'
+
+// ─── Resettable TextInput ───
+// @inkjs/ui TextInput has no way to clear after submit. This is a minimal
+// controlled version using ink's useInput that supports reset.
+
+type InputAction =
+  | { type: 'insert'; text: string }
+  | { type: 'delete' }
+  | { type: 'left' }
+  | { type: 'right' }
+  | { type: 'reset' }
+
+interface InputState { value: string; prevValue: string; cursor: number }
+
+function inputReducer(state: InputState, action: InputAction): InputState {
+  switch (action.type) {
+    case 'insert': {
+      const value = state.value.slice(0, state.cursor) + action.text + state.value.slice(state.cursor)
+      return { value, prevValue: state.value, cursor: state.cursor + action.text.length }
+    }
+    case 'delete': {
+      if (state.cursor === 0) return state
+      const value = state.value.slice(0, state.cursor - 1) + state.value.slice(state.cursor)
+      return { value, prevValue: state.value, cursor: state.cursor - 1 }
+    }
+    case 'left': return { ...state, cursor: Math.max(0, state.cursor - 1) }
+    case 'right': return { ...state, cursor: Math.min(state.value.length, state.cursor + 1) }
+    case 'reset': return { value: '', prevValue: state.value, cursor: 0 }
+  }
+}
+
+function ResettableInput({ placeholder, onSubmit, onChange, isDisabled }: {
+  placeholder: string
+  onSubmit: (value: string) => void
+  onChange?: (value: string) => void
+  isDisabled?: boolean
+}) {
+  const [state, dispatch] = useReducer(inputReducer, { value: '', prevValue: '', cursor: 0 })
+  const submitRef = useRef<string | null>(null)
+
+  // Fire onChange via useEffect to avoid stale closure issues
+  useEffect(() => {
+    if (state.value !== state.prevValue) {
+      onChange?.(state.value)
+    }
+  }, [state.value, state.prevValue, onChange])
+
+  // Fire onSubmit after reset
+  useEffect(() => {
+    if (submitRef.current !== null) {
+      const value = submitRef.current
+      submitRef.current = null
+      onSubmit(value)
+    }
+  })
+
+  useInput((input, key) => {
+    if (key.upArrow || key.downArrow || (key.ctrl && input === 'c') || key.tab || (key.shift && key.tab)) return
+    if (key.return) {
+      submitRef.current = state.value
+      dispatch({ type: 'reset' })
+      return
+    }
+    if (key.leftArrow) { dispatch({ type: 'left' }); return }
+    if (key.rightArrow) { dispatch({ type: 'right' }); return }
+    if (key.backspace || key.delete) { dispatch({ type: 'delete' }); return }
+    dispatch({ type: 'insert', text: input })
+  }, { isActive: !isDisabled })
+
+  if (state.value.length === 0) {
+    return (
+      <Text>
+        <Text inverse>{placeholder?.[0] ?? ' '}</Text>
+        <Text dimColor>{placeholder?.slice(1) ?? ''}</Text>
+      </Text>
+    )
+  }
+
+  const before = state.value.slice(0, state.cursor)
+  const cursorChar = state.value[state.cursor] ?? ' '
+  const after = state.value.slice(state.cursor + 1)
+
+  return (
+    <Text>
+      {before}
+      <Text inverse>{cursorChar}</Text>
+      {after}
+    </Text>
+  )
+}
+
+// ─── Types ───
 
 interface ChatMessage {
   role: 'user' | 'system' | 'assistant'
@@ -32,14 +124,8 @@ export function Chat({ messages, isGenerating, onSubmit, footerExtra, footerHint
 
   // Track current input for command hints
   const [currentInput, setCurrentInput] = useState('')
-  // Increment to force TextInput remount (clears input value)
-  const [inputKey, setInputKey] = useState(0)
 
-  // Build suggestions list for TextInput autocomplete
   const allCommands = useMemo(() => getCommands(), [])
-  const suggestions = useMemo(() => {
-    return allCommands.map(c => `/${c.name}`)
-  }, [allCommands])
 
   // Compute matching commands for the dropdown hint
   const matchingCommands = useMemo(() => {
@@ -108,19 +194,17 @@ export function Chat({ messages, isGenerating, onSubmit, footerExtra, footerHint
       {!isGenerating && (
         <Box paddingX={1}>
           <Text {...promptStyle}>{'> '}</Text>
-          <TextInput
-            key={inputKey}
+          <ResettableInput
             placeholder="Describe a workflow or type /help"
-            suggestions={suggestions}
             onChange={setCurrentInput}
             onSubmit={(value) => {
               const trimmed = value.trim()
               if (trimmed) {
                 setCurrentInput('')
-                setInputKey(k => k + 1)
                 onSubmit(trimmed)
               }
             }}
+            isDisabled={isGenerating}
           />
         </Box>
       )}
