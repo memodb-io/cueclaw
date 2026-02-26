@@ -58,7 +58,9 @@ export class TelegramChannel implements Channel {
       logger.error({ err: err.error }, 'Telegram bot error')
     })
 
-    await this.bot.start()
+    // bot.start() uses long polling and never resolves while running.
+    // Fire-and-forget, mark connected immediately.
+    this.bot.start()
     this.connected = true
     logger.info('Telegram bot connected')
   }
