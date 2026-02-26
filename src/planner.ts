@@ -2,9 +2,11 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod/v4'
 import { nanoid } from 'nanoid'
 import { validateDAG } from './workflow.js'
+import { createAnthropicClient } from './anthropic-client.js'
 import { PlannerError } from './types.js'
 import type { Workflow, PlannerOutput } from './types.js'
 import type { CueclawConfig } from './config.js'
+import { getConfiguredSecretKeys } from './env.js'
 import { logger } from './logger.js'
 
 // ─── PlannerOutput Zod Schema ───
@@ -102,9 +104,92 @@ const plannerTool: Anthropic.Tool = {
   input_schema: plannerOutputJsonSchema,
 }
 
+// ─── Ask Question Tool ───
+
+export const askQuestionTool: Anthropic.Tool = {
+  name: 'ask_question',
+  description: 'Ask the user a clarifying question to gather more information before creating a workflow. Use this when the user description is ambiguous or missing key details such as trigger frequency, specific repositories, filters, output format, etc.',
+  input_schema: {
+    type: 'object' as const,
+    required: ['question'],
+    properties: {
+      question: { type: 'string', description: 'The question to ask the user' },
+    },
+  },
+}
+
+// ─── Set Secret Tool ───
+
+export const setSecretTool: Anthropic.Tool = {
+  name: 'set_secret',
+  description: 'Store a secret/credential provided by the user (e.g., API token, webhook URL). The value will be saved to the environment for use by workflow steps. Only call this after the user explicitly provides the secret value.',
+  input_schema: {
+    type: 'object' as const,
+    required: ['key', 'value'],
+    properties: {
+      key: { type: 'string', description: 'Environment variable name in UPPER_SNAKE_CASE (e.g., GITHUB_TOKEN)' },
+      value: { type: 'string', description: 'The secret value provided by the user' },
+    },
+  },
+}
+
+// ─── Exported building blocks ───
+
+export { PlannerOutputSchema }
+export { plannerTool as plannerCreateWorkflowTool }
+
+/** Parse a tool_use response from the planner, validating the workflow output */
+export function parsePlannerToolResponse(
+  response: Anthropic.Message,
+): { type: 'question'; question: string } | { type: 'plan'; plannerOutput: PlannerOutput } | { type: 'set_secret'; key: string; value: string } | { type: 'text'; text: string } | { type: 'error'; error: string } {
+  if (!response.content || !Array.isArray(response.content)) {
+    return { type: 'error', error: 'Unexpected API response: no content array' }
+  }
+
+  // Check for ask_question tool
+  const askBlock = response.content.find(b => b.type === 'tool_use' && b.name === 'ask_question')
+  if (askBlock && askBlock.type === 'tool_use') {
+    const question = (askBlock.input as any)?.question
+    return { type: 'question', question: question ?? 'Could you provide more details?' }
+  }
+
+  // Check for set_secret tool
+  const secretBlock = response.content.find(b => b.type === 'tool_use' && b.name === 'set_secret')
+  if (secretBlock && secretBlock.type === 'tool_use') {
+    const input = secretBlock.input as any
+    return { type: 'set_secret', key: input.key, value: input.value }
+  }
+
+  // Check for create_workflow tool
+  const toolBlock = response.content.find(b => b.type === 'tool_use' && b.name === 'create_workflow')
+  if (toolBlock && toolBlock.type === 'tool_use') {
+    const parseResult = PlannerOutputSchema.safeParse(toolBlock.input)
+    if (!parseResult.success) {
+      const errMsg = parseResult.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')
+      return { type: 'error', error: `Invalid plan: ${errMsg}` }
+    }
+
+    const dagErrors = validateDAG(parseResult.data.steps)
+    if (dagErrors.length > 0) {
+      return { type: 'error', error: `DAG validation failed: ${dagErrors.join(', ')}` }
+    }
+
+    return { type: 'plan', plannerOutput: parseResult.data }
+  }
+
+  // Fallback: extract text content
+  const textBlocks = response.content.filter(b => b.type === 'text')
+  if (textBlocks.length > 0) {
+    const text = textBlocks.map(b => b.type === 'text' ? b.text : '').join('\n')
+    return { type: 'text', text }
+  }
+
+  return { type: 'error', error: 'Unexpected planner response format' }
+}
+
 // ─── System Prompt ───
 
-function buildPlannerSystemPrompt(config: CueclawConfig): string {
+export function buildPlannerSystemPrompt(config: CueclawConfig): string {
   const identity = config.identity?.name ? `\nUser identity: ${config.identity.name}` : ''
 
   return `You are CueClaw Planner. Convert user's natural language into a structured Workflow.
@@ -130,6 +215,18 @@ You don't need to verify tool availability — the agent detects at runtime.
 11. Steps must NOT include a status field — the framework sets all steps to pending automatically
 12. Step output is a plain text string — downstream agents parse structure themselves
 
+## Available Credentials
+
+${(() => {
+  const keys = getConfiguredSecretKeys()
+  if (keys.length > 0) {
+    return `The following credentials are configured: ${keys.join(', ')}\nYou can reference these in workflow steps — they are available as environment variables.`
+  }
+  return 'No credentials are currently configured.'
+})()}
+
+If a workflow needs credentials not listed above, use the set_secret tool to store them after the user provides the value. Never invent or guess secret values.
+
 ## User Identity
 ${identity}`
 }
@@ -140,10 +237,7 @@ export async function generatePlan(
   userDescription: string,
   config: CueclawConfig,
 ): Promise<Workflow> {
-  const anthropic = new Anthropic({
-    apiKey: config.claude.api_key,
-    baseURL: config.claude.base_url,
-  })
+  const anthropic = createAnthropicClient(config)
   const MAX_RETRIES = 2
   let retryContext = ''
 
@@ -154,14 +248,38 @@ export async function generatePlan(
 
     logger.debug({ attempt, hasRetryContext: !!retryContext }, 'Planner attempt')
 
-    const response = await anthropic.messages.create({
-      model: config.claude.planner.model,
-      max_tokens: 4096,
-      system: buildPlannerSystemPrompt(config),
-      messages: [{ role: 'user', content: prompt }],
-      tools: [plannerTool],
-      tool_choice: { type: 'tool', name: 'create_workflow' },
-    })
+    let response: Anthropic.Message
+    try {
+      response = await anthropic.messages.create({
+        model: config.claude.planner.model,
+        max_tokens: 4096,
+        system: buildPlannerSystemPrompt(config),
+        messages: [{ role: 'user', content: prompt }],
+        tools: [plannerTool],
+        tool_choice: { type: 'tool', name: 'create_workflow' },
+      })
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      throw new PlannerError(
+        `API request failed: ${detail}. Check your API key and base_url in ~/.cueclaw/config.yaml`
+      )
+    }
+
+    // OpenRouter and other proxies may return error objects instead of proper Anthropic responses
+    const rawResponse = response as any
+    if (rawResponse.type === 'error' || rawResponse.error) {
+      const errMsg = rawResponse.error?.message ?? JSON.stringify(rawResponse.error ?? rawResponse)
+      throw new PlannerError(`API error: ${errMsg}`)
+    }
+
+    if (!response.content || !Array.isArray(response.content)) {
+      logger.debug({ response: JSON.stringify(response).slice(0, 500) }, 'Unexpected API response shape')
+      throw new PlannerError(
+        `Unexpected API response (no content array). ` +
+        `This may indicate an issue with your API provider. ` +
+        `Response: ${JSON.stringify(response).slice(0, 200)}`
+      )
+    }
 
     const toolBlock = response.content.find(b => b.type === 'tool_use')
     if (!toolBlock || toolBlock.type !== 'tool_use') {
