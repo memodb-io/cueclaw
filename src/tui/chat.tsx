@@ -32,6 +32,8 @@ export function Chat({ messages, isGenerating, onSubmit, footerExtra, footerHint
 
   // Track current input for command hints
   const [currentInput, setCurrentInput] = useState('')
+  // Increment to force TextInput remount (clears input value)
+  const [inputKey, setInputKey] = useState(0)
 
   // Build suggestions list for TextInput autocomplete
   const allCommands = useMemo(() => getCommands(), [])
@@ -107,6 +109,7 @@ export function Chat({ messages, isGenerating, onSubmit, footerExtra, footerHint
         <Box paddingX={1}>
           <Text {...promptStyle}>{'> '}</Text>
           <TextInput
+            key={inputKey}
             placeholder="Describe a workflow or type /help"
             suggestions={suggestions}
             onChange={setCurrentInput}
@@ -114,6 +117,7 @@ export function Chat({ messages, isGenerating, onSubmit, footerExtra, footerHint
               const trimmed = value.trim()
               if (trimmed) {
                 setCurrentInput('')
+                setInputKey(k => k + 1)
                 onSubmit(trimmed)
               }
             }}
