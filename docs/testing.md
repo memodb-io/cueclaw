@@ -17,7 +17,8 @@
 | **Agent Runner** | query() call parameters, session resume, timeout handling | `@anthropic-ai/claude-agent-sdk`'s `query()` | `agent-runner.test.ts`: mock query() → verify session ID passing |
 | **Channels** | Message send/receive, formatting, reconnection logic | Third-party SDKs (baileys / grammy) | `whatsapp.test.ts`: mock Baileys → verify sendMessage calls |
 | **Config** | YAML loading, priority chain, Zod validation | `fs.readFileSync` (returns fixed YAML) | `config.test.ts`: various YAML inputs → verify merge behavior |
-| **TUI** | Ink component rendering | None (Ink provides `render` test utility) | `plan-view.test.tsx`: render → verify output contains step names |
+| **TUI** | Ink component rendering, slash commands | `ink-testing-library` render utility | `chat.test.tsx`, `renderers.test.tsx`, `commands.test.ts` |
+| **Planner Session** | Multi-turn conversation, tool responses | Anthropic SDK `client.messages.create` | `planner-session.test.ts`: ask_question/set_secret/create_workflow flows |
 
 ## Mock Patterns
 
@@ -48,6 +49,60 @@ vi.mock('./config.js', () => ({
   cueclawHome: () => '/tmp/cueclaw-test',
   loadConfig: () => ({ claude: { api_key: 'test-key', ... } }),
 }));
+```
+
+## TUI Component Testing
+
+TUI components use `ink-testing-library` for isolated rendering:
+
+```typescript
+import { render } from 'ink-testing-library'
+
+// Render component and assert output
+const { lastFrame } = render(<WorkflowTable workflows={mockWorkflows} />)
+expect(lastFrame()).toContain('my-workflow')
+
+// Chat component with command autocomplete
+const { lastFrame } = render(
+  <Chat messages={[]} isGenerating={false} onSubmit={vi.fn()} />
+)
+expect(lastFrame()).toContain('Describe a workflow')
+```
+
+### Slash Command Tests
+
+Commands are tested by creating a mock `CommandContext` and calling `execute()` directly:
+
+```typescript
+const messages: ChatMessage[] = []
+const ctx: CommandContext = {
+  db: _initTestDatabase(),
+  config: mockConfig,
+  cwd: '/tmp',
+  bridge: null,
+  addMessage: (msg) => messages.push(msg),
+  clearMessages: () => messages.length = 0,
+  setConfig: vi.fn(),
+}
+
+findCommand('help')!.execute('', ctx)
+expect(messages[0].text).toContain('Available commands')
+```
+
+### Planner Session Tests
+
+Multi-turn sessions are tested by mocking the Anthropic API to return specific tool_use responses:
+
+```typescript
+vi.mock('./anthropic-client.js', () => ({
+  createAnthropicClient: () => ({
+    messages: {
+      create: vi.fn().mockResolvedValue({
+        content: [{ type: 'tool_use', name: 'ask_question', input: { question: '...' } }],
+      }),
+    },
+  }),
+}))
 ```
 
 ## better-sqlite3 Test Strategy
@@ -95,4 +150,37 @@ jobs:
 pnpm test                          # Unit tests (fast, no external deps)
 pnpm test:integration              # Integration tests (mock agent runner, in-memory DB)
 # Manual validation uses real GitHub API — not automated
+```
+
+## Test Files
+
+23 test files covering ~177 tests:
+
+```
+src/
+├── config.test.ts               # Config loading, YAML parsing
+├── db.test.ts                   # SQLite CRUD, migrations
+├── env.test.ts                  # .env parsing, writeEnvVar, credential detection
+├── executor.test.ts             # DAG scheduling, parallel execution, failure policy
+├── group-queue.test.ts          # Concurrency control
+├── hooks.test.ts                # PreToolUse, PreCompact hooks
+├── integration.test.ts          # End-to-end workflow flows
+├── ipc.test.ts                  # Host ↔ container IPC
+├── mcp-server.test.ts           # MCP server tools
+├── mount-security.test.ts       # Mount allowlist validation
+├── planner.test.ts              # Planner output parsing, DAG validation
+├── planner-session.test.ts      # Multi-turn conversation, tool responses
+├── router.test.ts               # Message routing
+├── session.test.ts              # Session resume, compaction
+├── setup-environment.test.ts    # Environment detection
+├── trigger.test.ts              # Trigger evaluation
+├── types.test.ts                # Type validation
+├── workflow.test.ts             # Workflow state machine
+├── container-runner.test.ts     # Container spawn
+├── channels/
+│   └── telegram.test.ts         # Telegram channel
+└── tui/
+    ├── chat.test.tsx            # Chat component rendering, command hints
+    ├── commands.test.ts         # Slash command parsing and execution
+    └── renderers.test.tsx       # WorkflowTable, WorkflowDetail components
 ```

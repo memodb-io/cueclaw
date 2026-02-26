@@ -170,6 +170,90 @@ Rules:
 - Use `dagre` ([npmjs.com/package/dagre](https://www.npmjs.com/package/dagre)) or `elkjs` ([npmjs.com/package/elkjs](https://www.npmjs.com/package/elkjs)) for layout computation — no custom implementation needed
 - Framework injects position before storing in SQLite / returning to UI
 
+## Planner Session Types
+
+Multi-turn conversation types for iterative workflow creation (`src/planner-session.ts`):
+
+```typescript
+interface PlannerSession {
+  id: string                        // ps_ + nanoid
+  messages: Anthropic.MessageParam[] // Full conversation history
+  status: 'conversing' | 'plan_ready' | 'cancelled'
+  workflow: Workflow | null          // Set when status = 'plan_ready'
+}
+
+interface PlannerTurn {
+  type: 'question' | 'plan' | 'text' | 'error'
+  content: string                   // Question text, plan summary, or error message
+  workflow?: Workflow               // Present when type = 'plan'
+}
+
+interface StreamCallbacks {
+  onToken?: (token: string) => void // Called for each streaming token
+}
+```
+
+### Planner Tools
+
+The multi-turn planner uses three tools:
+
+| Tool | Purpose | When Used |
+|------|---------|-----------|
+| `ask_question` | Ask user for clarification | Vague/ambiguous requests, missing credentials |
+| `set_secret` | Store a credential (env var) | User provides API token, webhook URL, etc. |
+| `create_workflow` | Generate final `PlannerOutput` | Requirements are clear, ready to plan |
+
+`set_secret` auto-continues: after storing the credential, the planner recursively runs another turn (may ask more questions or create the workflow).
+
+## TUI Types
+
+### Chat Message
+
+```typescript
+interface ChatMessage {
+  role: 'user' | 'system' | 'assistant'
+  text?: string                     // Plain text content
+  content?: React.ReactNode         // Rich content (e.g., WorkflowTable component)
+}
+```
+
+### Slash Commands
+
+```typescript
+interface CommandContext {
+  db: Database.Database
+  config: CueclawConfig | null
+  cwd: string
+  bridge: DaemonBridge | null
+  addMessage: (msg: ChatMessage) => void
+  clearMessages: () => void
+  setConfig: (config: CueclawConfig) => void
+}
+
+interface SlashCommand {
+  name: string                      // Primary command name (e.g., 'list')
+  aliases: string[]                 // Alternative names (e.g., ['ls'])
+  description: string
+  usage: string                     // Usage string (e.g., '/list')
+  execute: (args: string, ctx: CommandContext) => Promise<void> | void
+}
+```
+
+### Daemon Bridge
+
+```typescript
+interface DaemonBridge {
+  triggerLoop: TriggerLoop | null   // null when isExternal
+  router: MessageRouter | null      // null when isExternal
+  botChannels: Channel[]            // Connected bot channels
+  isExternal: boolean               // true = system service running
+}
+
+interface InitDaemonBridgeOptions {
+  skipBots?: boolean                // Skip bot channel initialization
+}
+```
+
 ## Channel Interface
 
 ```typescript

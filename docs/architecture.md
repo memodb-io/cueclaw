@@ -64,9 +64,11 @@ cueclaw/
 │   ├── config.ts                # Config constants, paths, env vars
 │   ├── types.ts                 # Centralized type definitions
 │   ├── logger.ts                # pino structured logging
-│   ├── env.ts                   # .env parsing (secrets NOT in process.env)
+│   ├── env.ts                   # .env parsing + auto-inject into process.env
 │   │
 │   ├── planner.ts               # LLM Planner — natural language → Workflow JSON
+│   ├── planner-session.ts       # Multi-turn conversation session (ask → clarify → create)
+│   ├── anthropic-client.ts      # Anthropic SDK client factory (official API vs third-party proxies)
 │   ├── executor.ts              # Execute steps by DAG (parallel), invoke agent
 │   ├── agent-runner.ts          # Claude Agent SDK query() wrapper
 │   ├── hooks.ts                 # PreToolUse, PreCompact hooks
@@ -91,11 +93,16 @@ cueclaw/
 │   │   └── tui.ts               # TUI Channel (Ink)
 │   │
 │   └── tui/
-│       ├── app.tsx              # Ink root component + ThemeProvider
+│       ├── app.tsx              # Ink root component — multi-view (onboarding/chat/execution)
 │       ├── theme.ts             # @inkjs/ui extendTheme — semantic color definitions
-│       ├── banner.tsx           # ASCII logo
-│       ├── chat.tsx             # Chat component
+│       ├── version.ts           # Dynamic version detection (dev vs package.json)
+│       ├── chat.tsx             # Chat component (messages, streaming, command autocomplete)
+│       ├── commands.ts          # Slash command registry (15+ commands: /help, /list, /status, etc.)
+│       ├── daemon-bridge.ts     # TUI ↔ daemon abstraction (external service or in-process)
+│       ├── onboarding.tsx       # Interactive setup wizard (API key, base URL, bots)
+│       ├── renderers.tsx        # Workflow display components (WorkflowTable, WorkflowDetail)
 │       ├── plan-view.tsx        # Plan display/confirmation component
+│       ├── execution-view.tsx   # Live execution progress panel
 │       └── status.tsx           # Running status panel
 │
 ├── container/                   # Agent container (Phase 2: Docker isolation)
@@ -171,3 +178,72 @@ Level 3: Tool Allowlist (Application-level)
 ```
 
 Local mode uses Level 0 + Level 3 + PreToolUse hooks (see plans/phase-1-core-engine.md § 1.8). Container mode adds Level 1 + Level 2 (see plans/phase-2-container-isolation.md).
+
+## Multi-Turn Planner Session
+
+The planner supports iterative conversation via `PlannerSession`:
+
+```
+User message → PlannerSession
+  → LLM responds with one of three tools:
+    1. ask_question → Clarifying question sent back to user → wait for reply → loop
+    2. set_secret   → Store credential in env → auto-continue (LLM may ask more or create plan)
+    3. create_workflow → Final plan generated → awaiting_confirmation
+  → Or plain text response (no tool call)
+```
+
+The session maintains full message history so the LLM has context across turns. The `set_secret` tool automatically persists credentials (`.env` in dev, `process.env` in production) and recursively continues the conversation.
+
+## Anthropic Client Factory
+
+`createAnthropicClient(config)` handles authentication differences between the official API and third-party proxies (e.g., OpenRouter):
+
+- **Official API** (`base_url = https://api.anthropic.com`): Uses `apiKey` parameter
+- **Third-party proxy** (any other `base_url`): Uses `authToken` parameter with empty `apiKey` to bypass proxy API key validation
+
+## Daemon Bridge
+
+The TUI uses a `DaemonBridge` abstraction to decouple from the backend daemon:
+
+- **External mode** (`isExternal: true`): A system service daemon (launchd/systemd) is running — TUI acts as frontend only
+- **In-process mode** (`isExternal: false`): No external daemon — TUI starts `TriggerLoop`, `MessageRouter`, and bot channels in-process
+
+Bot channels (Telegram/WhatsApp) can be started lazily via `startBotChannels()` after user confirmation, avoiding startup delays (e.g., WhatsApp QR scan).
+
+## TUI Architecture
+
+The TUI is a multi-view Ink/React application:
+
+```
+┌─────────────────────────────────────────┐
+│ App                                      │
+│ ┌─────────────────────────────────────┐  │
+│ │ View: Onboarding                    │  │  First-run setup wizard
+│ │  → API Key → Base URL → Container   │  │  (skipped if configured)
+│ │  → Telegram → WhatsApp → Done       │  │
+│ └─────────────────────────────────────┘  │
+│ ┌─────────────────────────────────────┐  │
+│ │ View: Chat                          │  │  Main interaction view
+│ │  → Slash commands (/help, /list...) │  │  Multi-turn planner conversation
+│ │  → Command autocomplete             │  │  Streaming text display
+│ └─────────────────────────────────────┘  │
+│ ┌─────────────────────────────────────┐  │
+│ │ View: Plan / Execution              │  │  Plan confirmation (Y/M/N)
+│ │  → Plan confirmation                │  │  Live execution progress
+│ │  → Real-time step progress          │  │
+│ └─────────────────────────────────────┘  │
+└─────────────────────────────────────────┘
+
+Slash Commands (tui/commands.ts):
+  /help, /list, /status, /pause, /resume, /delete,
+  /config, /daemon, /info, /clear, /new, /cancel,
+  /bot, /setup
+```
+
+### Onboarding Flow
+
+`needsOnboarding()` detects first-run or misconfigured state. The wizard supports:
+- **Full mode**: Walk through all steps (API key → base URL → container → Telegram → WhatsApp)
+- **Fix-it mode**: Skip to the specific step that needs fixing (based on `validateConfig()` issues)
+- **Existing config detection**: Shows current values with option to keep or change
+- **Dev vs production**: Dev writes secrets to `.env`, production writes to `config.yaml`

@@ -4,13 +4,15 @@ Orchestrate agent workflows with natural language. Uses the Claude Agent SDK to 
 
 ## Project Status
 
-MVP implemented (Phases 0-6). 119 tests passing across 19 test files.
+MVP implemented (Phases 0-6) with multi-turn planner, TUI slash commands, and daemon bridge. ~177 tests across 23 test files.
 
 ## Key Concepts
 
 - **Workflow**: Natural language → Planner (LLM) → PlannerOutput → framework fills id/phase/timestamps → Workflow JSON (DAG of steps)
+- **Planner Session**: Multi-turn conversation with the planner — clarify requirements, store credentials, then generate workflow
 - **Executor**: Parallel DAG execution — independent steps run concurrently via `Promise.all`
 - **Channel**: Unified interface for TUI, WhatsApp, Telegram — all share identical capabilities
+- **Daemon Bridge**: Abstraction between TUI and backend — detects external system service or runs in-process
 - **Input References**: `$steps.{id}.output` (step results) and `$trigger_data` (trigger payload), resolved at execution time
 - **Session**: Per-step (not per-run) — steps don't share session context to avoid pollution
 
@@ -18,10 +20,13 @@ MVP implemented (Phases 0-6). 119 tests passing across 19 test files.
 
 ```
 User (TUI / WhatsApp / Telegram)
-  → Channel interface → MessageRouter → Planner (LLM)
-  → User confirms plan
+  → Channel interface → MessageRouter → PlannerSession (multi-turn)
+  → Planner asks questions / stores secrets → User confirms plan
   → Executor → Agent Runner (Claude Agent SDK query())
   → Results persisted to SQLite
+
+TUI: Onboarding → Chat (slash commands) → Plan View → Execution View
+     DaemonBridge (external service or in-process TriggerLoop + bot channels)
 ```
 
 ## Tech Stack
