@@ -1,5 +1,11 @@
 # cueclaw
 
+## 0.1.1
+
+### Patch Changes
+
+- Fix FOREIGN KEY constraint error when confirming workflows via bot channels. Workflows are now persisted to the database before confirmation.
+
 ## 0.1.0
 
 ### Minor Changes
