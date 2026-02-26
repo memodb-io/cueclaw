@@ -1,5 +1,11 @@
 # cueclaw
 
+## 0.1.0
+
+### Minor Changes
+
+- Add chat intent classification and Telegram callback button support. Non-command messages are now classified via LLM to distinguish casual chat from workflow requests, and Telegram inline keyboard buttons (Confirm/Modify/Cancel) are properly wired.
+
 ## 0.0.4
 
 ### Patch Changes
