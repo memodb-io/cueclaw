@@ -4,7 +4,7 @@ import { generatePlan, modifyPlan, confirmPlan, rejectPlan } from './planner.js'
 import { executeWorkflow } from './executor.js'
 import { createAnthropicClient } from './anthropic-client.js'
 import type { CueclawConfig } from './config.js'
-import { listWorkflows, getWorkflow, updateWorkflowPhase } from './db.js'
+import { listWorkflows, getWorkflow, updateWorkflowPhase, insertWorkflow } from './db.js'
 import { logger } from './logger.js'
 
 const CONFIRMATION_TIMEOUT = 10 * 60_000
@@ -212,6 +212,7 @@ export class MessageRouter {
 
     try {
       const workflow = await generatePlan(text, this.config)
+      insertWorkflow(this.db, workflow)
       channel.setTyping?.(chatJid, false)
 
       this.pendingConfirmations.set(chatJid, {
@@ -275,6 +276,7 @@ export class MessageRouter {
 
       try {
         const modified = await modifyPlan(pending.workflow, text, this.config)
+        insertWorkflow(this.db, modified)
         channel.setTyping?.(chatJid, false)
 
         this.pendingConfirmations.set(chatJid, {
