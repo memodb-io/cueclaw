@@ -31,25 +31,31 @@ export function PlanView({ workflow, onConfirm, onModify, onCancel }: PlanViewPr
   const failureDesc = workflow.failure_policy.on_step_failure
 
   return (
-    <Box flexDirection="column" paddingX={1} borderStyle="round" {...borderStyle}>
-      <Text {...titleStyle}>Plan: {workflow.name}</Text>
-      <Text dimColor>Trigger: {triggerLabel}</Text>
-      <Text>{''}</Text>
+    <Box flexDirection="column" paddingX={1} flexGrow={1}>
+      {/* Content — grows to push actions to bottom */}
+      <Box flexDirection="column" flexGrow={1} borderStyle="round" {...borderStyle}>
+        <Text {...titleStyle}>Plan: {workflow.name}</Text>
+        <Text dimColor>Trigger: {triggerLabel}</Text>
+        <Text>{''}</Text>
 
-      {workflow.steps.map((step, i) => (
-        <StepLine key={step.id} step={step} index={i + 1} style={pendingStyle} />
-      ))}
+        {workflow.steps.map((step, i) => (
+          <StepLine key={step.id} step={step} index={i + 1} style={pendingStyle} />
+        ))}
 
-      <Text>{''}</Text>
-      <Text dimColor>Failure policy: {failureDesc}</Text>
-      <Text>{''}</Text>
-      <Text>
-        <Text color="green">[Y] Confirm</Text>
-        {'  '}
-        <Text color="yellow">[M] Modify</Text>
-        {'  '}
-        <Text color="red">[N] Cancel</Text>
-      </Text>
+        <Text>{''}</Text>
+        <Text dimColor>Failure policy: {failureDesc}</Text>
+      </Box>
+
+      {/* Actions — pinned to bottom */}
+      <Box marginTop={1}>
+        <Text>
+          <Text color="green">[Y] Confirm</Text>
+          {'  '}
+          <Text color="yellow">[M] Modify</Text>
+          {'  '}
+          <Text color="red">[N] Cancel</Text>
+        </Text>
+      </Box>
     </Box>
   )
 }

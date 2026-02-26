@@ -2,10 +2,9 @@ import { extendTheme, defaultTheme } from '@inkjs/ui'
 
 export const cueclawTheme = extendTheme(defaultTheme, {
   components: {
-    Banner: {
+    Header: {
       styles: {
-        logo: () => ({ color: 'cyan' }),
-        tagline: () => ({ color: 'gray', dimColor: true }),
+        hints: () => ({ color: 'white', dimColor: true }),
       },
     },
     PlanView: {
@@ -30,6 +29,7 @@ export const cueclawTheme = extendTheme(defaultTheme, {
       styles: {
         userMessage: () => ({ color: 'white', bold: true }),
         systemMessage: () => ({ color: 'cyan' }),
+        assistantMessage: () => ({ color: 'white' }),
         prompt: () => ({ color: 'green' }),
       },
     },
