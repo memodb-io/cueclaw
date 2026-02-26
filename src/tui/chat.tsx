@@ -175,21 +175,6 @@ export function Chat({ messages, isGenerating, onSubmit, footerExtra, footerHint
         )}
       </Box>
 
-      {/* Command hints dropdown — shown above input when typing / */}
-      {!isGenerating && showCommandHints && (
-        <Box flexDirection="column" paddingX={1} marginBottom={0}>
-          <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
-            {matchingCommands.slice(0, 8).map((cmd) => (
-              <Box key={cmd.name} gap={1}>
-                <Text color="cyan" bold>/{cmd.name}</Text>
-                <Text dimColor>{cmd.usage !== `/${cmd.name}` ? cmd.usage.replace(`/${cmd.name}`, '').trim() + ' ' : ''}</Text>
-                <Text dimColor>— {cmd.description}</Text>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-
       {/* Input */}
       {!isGenerating && (
         <Box paddingX={1}>
@@ -206,6 +191,18 @@ export function Chat({ messages, isGenerating, onSubmit, footerExtra, footerHint
             }}
             isDisabled={isGenerating}
           />
+        </Box>
+      )}
+
+      {/* Command hints — shown below input when typing / */}
+      {!isGenerating && showCommandHints && (
+        <Box flexDirection="column" paddingX={2}>
+          {matchingCommands.slice(0, 6).map((cmd) => (
+            <Box key={cmd.name} gap={1}>
+              <Text color="cyan">/{cmd.name}</Text>
+              <Text dimColor>— {cmd.description}</Text>
+            </Box>
+          ))}
         </Box>
       )}
 
