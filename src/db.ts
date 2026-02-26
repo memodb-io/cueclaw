@@ -163,7 +163,21 @@ export function updateWorkflowPhase(db: Database.Database, id: string, phase: Wo
 }
 
 export function deleteWorkflow(db: Database.Database, id: string): void {
-  db.prepare('DELETE FROM workflows WHERE id = ?').run(id)
+  const del = db.transaction(() => {
+    // Delete in FK dependency order: sessions → step_runs → workflow_runs → trigger_state → workflows
+    const runIds = db.prepare('SELECT id FROM workflow_runs WHERE workflow_id = ?').all(id) as { id: string }[]
+    for (const run of runIds) {
+      const stepRunIds = db.prepare('SELECT id FROM step_runs WHERE run_id = ?').all(run.id) as { id: string }[]
+      for (const sr of stepRunIds) {
+        db.prepare('DELETE FROM sessions WHERE step_run_id = ?').run(sr.id)
+      }
+      db.prepare('DELETE FROM step_runs WHERE run_id = ?').run(run.id)
+    }
+    db.prepare('DELETE FROM workflow_runs WHERE workflow_id = ?').run(id)
+    db.prepare('DELETE FROM trigger_state WHERE workflow_id = ?').run(id)
+    db.prepare('DELETE FROM workflows WHERE id = ?').run(id)
+  })
+  del()
 }
 
 // ─── CRUD: Workflow Runs ───
@@ -206,4 +220,8 @@ export function updateStepRunStatus(db: Database.Database, id: string, status: S
 
 export function getStepRunsByRunId(db: Database.Database, runId: string): StepRun[] {
   return db.prepare('SELECT * FROM step_runs WHERE run_id = ?').all(runId) as StepRun[]
+}
+
+export function getWorkflowRunsByWorkflowId(db: Database.Database, workflowId: string): WorkflowRun[] {
+  return db.prepare('SELECT * FROM workflow_runs WHERE workflow_id = ? ORDER BY started_at DESC').all(workflowId) as WorkflowRun[]
 }

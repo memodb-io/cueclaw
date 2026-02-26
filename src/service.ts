@@ -41,14 +41,31 @@ export function uninstallService(): { success: boolean; error?: string } {
   }
 }
 
+export function stopService(): { success: boolean; error?: string } {
+  const platform = process.platform
+  try {
+    if (platform === 'darwin') {
+      execFileSync('launchctl', ['stop', SERVICE_LABEL], { stdio: 'pipe' })
+      return { success: true }
+    } else if (platform === 'linux') {
+      execFileSync('systemctl', ['--user', 'stop', 'cueclaw'], { stdio: 'pipe' })
+      return { success: true }
+    } else {
+      return { success: false, error: `Unsupported platform: ${platform}` }
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 export function getServiceStatus(): 'running' | 'stopped' | 'unknown' {
   const platform = process.platform
   try {
     if (platform === 'darwin') {
-      const output = execFileSync('launchctl', ['list', SERVICE_LABEL], { encoding: 'utf-8' })
-      return output.includes(SERVICE_LABEL) ? 'running' : 'stopped'
+      const output = execFileSync('launchctl', ['list', SERVICE_LABEL], { encoding: 'utf-8', stdio: 'pipe' })
+      return output.includes('"PID"') ? 'running' : 'stopped'
     } else if (platform === 'linux') {
-      const output = execFileSync('systemctl', ['--user', 'is-active', 'cueclaw'], { encoding: 'utf-8' }).trim()
+      const output = execFileSync('systemctl', ['--user', 'is-active', 'cueclaw'], { encoding: 'utf-8', stdio: 'pipe' }).trim()
       return output === 'active' ? 'running' : 'stopped'
     }
   } catch {

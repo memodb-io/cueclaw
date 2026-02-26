@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
-import { loadConfig, ensureCueclawHome, createDefaultConfig } from './config.js'
-import { initDb, listWorkflows } from './db.js'
+import { createInterface } from 'node:readline'
+import { loadConfig, ensureCueclawHome, createDefaultConfig, cueclawHome } from './config.js'
+import { initDb, listWorkflows, insertWorkflow, getWorkflow, updateWorkflowPhase, deleteWorkflow, getWorkflowRunsByWorkflowId, getStepRunsByRunId } from './db.js'
 import { loadSecrets } from './env.js'
 import { logger } from './logger.js'
 
@@ -59,11 +60,124 @@ configCmd.command('get')
     }
   })
 
+configCmd.command('set')
+  .argument('<key>', 'Config key (dot notation, e.g. claude.executor.model)')
+  .argument('<value>', 'Value to set')
+  .description('Set config value')
+  .action(async (key: string, value: string) => {
+    try {
+      const { readFileSync, writeFileSync, existsSync } = await import('node:fs')
+      const { join } = await import('node:path')
+      const { parse: parseYaml, stringify: stringifyYaml } = await import('yaml')
+      const { isDev, writeEnvVar } = await import('./env.js')
+
+      const configPath = join(cueclawHome(), 'config.yaml')
+      if (!existsSync(configPath)) {
+        createDefaultConfig()
+      }
+
+      const content = readFileSync(configPath, 'utf-8')
+      const doc = parseYaml(content) ?? {}
+
+      // Env-backed keys: dev writes to .env, production writes to config.yaml
+      const envVarMap: Record<string, string> = {
+        'claude.api_key': 'ANTHROPIC_API_KEY',
+        'claude.base_url': 'ANTHROPIC_BASE_URL',
+      }
+      const envVar = envVarMap[key]
+
+      if (isDev && envVar) {
+        // Dev mode: only write to .env, leave config.yaml placeholder untouched
+        writeEnvVar(envVar, value)
+        console.log(`Set ${key} (stored in .env as ${envVar})`)
+      } else {
+        // Production mode (or non-sensitive key): write to config.yaml
+        let parsed: any = value
+        if (value === 'true') parsed = true
+        else if (value === 'false') parsed = false
+        else if (/^\d+$/.test(value)) parsed = Number(value)
+
+        const parts = key.split('.')
+        let target: any = doc
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i]!
+          if (target[part] === undefined || target[part] === null || typeof target[part] !== 'object') {
+            target[part] = {}
+          }
+          target = target[part]
+        }
+        target[parts[parts.length - 1]!] = parsed
+
+        writeFileSync(configPath, stringifyYaml(doc), 'utf-8')
+        console.log(`Set ${key} = ${JSON.stringify(parsed)}`)
+      }
+    } catch (err) {
+      logger.error({ err }, 'Failed to set config')
+      process.exit(1)
+    }
+  })
+
 // ─── Workflow management stubs ───
 
 program.command('new')
-  .description('Create a new workflow interactively')
-  .action(() => { console.log('Workflow creation coming in Phase 1') })
+  .description('Create a new workflow from a natural language description')
+  .argument('<description>', 'Workflow description in natural language')
+  .action(async (description: string) => {
+    try {
+      const config = loadConfig()
+      const { generatePlan, confirmPlan } = await import('./planner.js')
+      const { executeWorkflow } = await import('./executor.js')
+
+      console.log('Planning workflow...')
+      const workflow = await generatePlan(description, config)
+
+      console.log(`\nWorkflow: ${workflow.name}`)
+      console.log(`Trigger:  ${workflow.trigger.type}`)
+      console.log(`Steps:`)
+      for (const step of workflow.steps) {
+        const deps = step.depends_on.length > 0 ? ` (after: ${step.depends_on.join(', ')})` : ''
+        console.log(`  - ${step.id}: ${step.description.slice(0, 80)}${step.description.length > 80 ? '...' : ''}${deps}`)
+      }
+
+      const rl = createInterface({ input: process.stdin, output: process.stdout })
+      const answer = await new Promise<string>(resolve => {
+        rl.question('\nConfirm and execute? (y/N) ', resolve)
+      })
+      rl.close()
+
+      if (answer.toLowerCase() !== 'y') {
+        console.log('Cancelled.')
+        return
+      }
+
+      ensureCueclawHome()
+      const db = initDb()
+      insertWorkflow(db, workflow)
+      const confirmed = confirmPlan(workflow)
+      updateWorkflowPhase(db, confirmed.id, confirmed.phase)
+
+      if (confirmed.phase === 'executing') {
+        console.log('\nExecuting workflow...')
+        const result = await executeWorkflow({
+          workflow: confirmed,
+          triggerData: null,
+          db,
+          cwd: process.cwd(),
+          onProgress: (stepId, msg) => {
+            if (msg?.status) console.log(`  [${stepId}] ${msg.status}`)
+          },
+        })
+        console.log(`\nWorkflow ${result.status}. Run ID: ${result.runId}`)
+      } else {
+        console.log(`\nWorkflow saved as "${confirmed.phase}". ID: ${confirmed.id}`)
+      }
+
+      db.close()
+    } catch (err) {
+      logger.error({ err }, 'Failed to create workflow')
+      process.exit(1)
+    }
+  })
 
 program.command('list')
   .description('List all workflows')
@@ -89,22 +203,183 @@ program.command('list')
 program.command('status')
   .argument('[workflow-id]', 'Workflow ID')
   .description('View workflow status')
-  .action(() => { console.log('Status view coming in Phase 1') })
+  .action((workflowId?: string) => {
+    try {
+      ensureCueclawHome()
+      const db = initDb()
+
+      if (!workflowId) {
+        const workflows = listWorkflows(db)
+        if (workflows.length === 0) {
+          console.log('No workflows found.')
+          db.close()
+          return
+        }
+        console.log('Workflows:\n')
+        for (const wf of workflows) {
+          console.log(`  ${wf.id}  ${wf.phase.padEnd(22)}  ${wf.name}`)
+          console.log(`    Trigger: ${wf.trigger.type}  |  Steps: ${wf.steps.length}  |  Updated: ${wf.updated_at}`)
+        }
+        db.close()
+        return
+      }
+
+      const wf = getWorkflow(db, workflowId)
+      if (!wf) {
+        console.error(`Workflow not found: ${workflowId}`)
+        db.close()
+        process.exit(1)
+      }
+
+      console.log(`Workflow: ${wf.name}`)
+      console.log(`ID:      ${wf.id}`)
+      console.log(`Phase:   ${wf.phase}`)
+      console.log(`Trigger: ${wf.trigger.type}`)
+      console.log(`Created: ${wf.created_at}`)
+      console.log(`Updated: ${wf.updated_at}`)
+      console.log(`\nSteps:`)
+      for (const step of wf.steps) {
+        const deps = step.depends_on.length > 0 ? ` (after: ${step.depends_on.join(', ')})` : ''
+        console.log(`  - ${step.id}: ${step.description.slice(0, 100)}${step.description.length > 100 ? '...' : ''}${deps}`)
+      }
+
+      const runs = getWorkflowRunsByWorkflowId(db, workflowId)
+      if (runs.length > 0) {
+        const latest = runs[0]!
+        console.log(`\nLatest Run: ${latest.id}`)
+        console.log(`  Status:  ${latest.status}`)
+        console.log(`  Started: ${latest.started_at}`)
+        if (latest.completed_at) console.log(`  Ended:   ${latest.completed_at}`)
+        if (latest.error) console.log(`  Error:   ${latest.error}`)
+
+        const stepRuns = getStepRunsByRunId(db, latest.id)
+        if (stepRuns.length > 0) {
+          console.log(`  Step Results:`)
+          for (const sr of stepRuns) {
+            const output = sr.output_json ? ` — ${sr.output_json.slice(0, 60)}${sr.output_json.length > 60 ? '...' : ''}` : ''
+            console.log(`    ${sr.step_id}: ${sr.status}${output}`)
+          }
+        }
+      }
+
+      db.close()
+    } catch (err) {
+      logger.error({ err }, 'Failed to get workflow status')
+      process.exit(1)
+    }
+  })
 
 program.command('pause')
   .argument('<workflow-id>', 'Workflow ID')
   .description('Pause a workflow')
-  .action(() => { console.log('Pause coming in Phase 1') })
+  .action((workflowId: string) => {
+    try {
+      ensureCueclawHome()
+      const db = initDb()
+      const wf = getWorkflow(db, workflowId)
+      if (!wf) {
+        console.error(`Workflow not found: ${workflowId}`)
+        db.close()
+        process.exit(1)
+      }
+      if (wf.phase !== 'active') {
+        console.error(`Cannot pause workflow in phase "${wf.phase}" (must be "active")`)
+        db.close()
+        process.exit(1)
+      }
+      updateWorkflowPhase(db, workflowId, 'paused')
+      console.log(`Paused workflow "${wf.name}" (${workflowId})`)
+      db.close()
+    } catch (err) {
+      logger.error({ err }, 'Failed to pause workflow')
+      process.exit(1)
+    }
+  })
 
 program.command('resume')
   .argument('<workflow-id>', 'Workflow ID')
   .description('Resume a paused workflow')
-  .action(() => { console.log('Resume coming in Phase 1') })
+  .action(async (workflowId: string) => {
+    try {
+      ensureCueclawHome()
+      const db = initDb()
+      const wf = getWorkflow(db, workflowId)
+      if (!wf) {
+        console.error(`Workflow not found: ${workflowId}`)
+        db.close()
+        process.exit(1)
+      }
+      if (wf.phase !== 'paused') {
+        console.error(`Cannot resume workflow in phase "${wf.phase}" (must be "paused")`)
+        db.close()
+        process.exit(1)
+      }
+
+      if (wf.trigger.type === 'manual') {
+        updateWorkflowPhase(db, workflowId, 'executing')
+        console.log(`Executing workflow "${wf.name}"...`)
+        const { executeWorkflow } = await import('./executor.js')
+        const result = await executeWorkflow({
+          workflow: { ...wf, phase: 'executing' },
+          triggerData: null,
+          db,
+          cwd: process.cwd(),
+          onProgress: (stepId, msg) => {
+            if (msg?.status) console.log(`  [${stepId}] ${msg.status}`)
+          },
+        })
+        console.log(`Workflow ${result.status}. Run ID: ${result.runId}`)
+      } else {
+        updateWorkflowPhase(db, workflowId, 'active')
+        console.log(`Resumed workflow "${wf.name}" (${workflowId})`)
+      }
+
+      db.close()
+    } catch (err) {
+      logger.error({ err }, 'Failed to resume workflow')
+      process.exit(1)
+    }
+  })
 
 program.command('delete')
   .argument('<workflow-id>', 'Workflow ID')
   .description('Delete a workflow')
-  .action(() => { console.log('Delete coming in Phase 1') })
+  .action(async (workflowId: string) => {
+    try {
+      ensureCueclawHome()
+      const db = initDb()
+      const wf = getWorkflow(db, workflowId)
+      if (!wf) {
+        console.error(`Workflow not found: ${workflowId}`)
+        db.close()
+        process.exit(1)
+      }
+      if (wf.phase === 'executing') {
+        console.error(`Cannot delete workflow while it is executing`)
+        db.close()
+        process.exit(1)
+      }
+
+      const rl = createInterface({ input: process.stdin, output: process.stdout })
+      const answer = await new Promise<string>(resolve => {
+        rl.question(`Delete workflow "${wf.name}" (${workflowId})? (y/N) `, resolve)
+      })
+      rl.close()
+
+      if (answer.toLowerCase() !== 'y') {
+        console.log('Cancelled.')
+        db.close()
+        return
+      }
+
+      deleteWorkflow(db, workflowId)
+      console.log(`Deleted workflow "${wf.name}" (${workflowId})`)
+      db.close()
+    } catch (err) {
+      logger.error({ err }, 'Failed to delete workflow')
+      process.exit(1)
+    }
+  })
 
 // ─── Daemon stubs ───
 
@@ -125,9 +400,20 @@ daemonCmd.command('start')
 
 daemonCmd.command('stop')
   .description('Stop the daemon')
-  .action(() => {
-    // In service mode, stop is handled by launchctl/systemctl
-    console.log('Use launchctl unload (macOS) or systemctl --user stop cueclaw (Linux)')
+  .action(async () => {
+    const { getServiceStatus, stopService } = await import('./service.js')
+    const status = getServiceStatus()
+    if (status !== 'running') {
+      console.log('Daemon is not running.')
+      return
+    }
+    const result = stopService()
+    if (result.success) {
+      console.log('Daemon stopped.')
+    } else {
+      console.log(`Failed to stop daemon: ${result.error}`)
+      process.exit(1)
+    }
   })
 
 daemonCmd.command('install')
@@ -251,13 +537,15 @@ program.command('setup')
 
 program.command('tui')
   .description('Start interactive TUI')
-  .option('--no-banner', 'Skip the startup banner')
-  .action(async (opts: { banner?: boolean }) => {
+  .option('--skip-onboarding', 'Skip first-run onboarding wizard')
+  .action(async (opts: { skipOnboarding?: boolean }) => {
     try {
+      const { enableTuiLogging } = await import('./logger.js')
+      enableTuiLogging()
       const React = await import('react')
       const { render } = await import('ink')
       const { App } = await import('./tui/app.js')
-      render(React.createElement(App, { noBanner: opts.banner === false, cwd: process.cwd() }))
+      render(React.createElement(App, { cwd: process.cwd(), skipOnboarding: opts.skipOnboarding }))
     } catch (err) {
       logger.error({ err }, 'Failed to start TUI')
       process.exit(1)
@@ -266,18 +554,22 @@ program.command('tui')
 
 // ─── Default command ───
 
-program.action(async () => {
+program
+  .option('--skip-onboarding', 'Skip first-run onboarding wizard')
+  .action(async (_opts: Record<string, unknown>, cmd: Command) => {
+  const skipOnboarding = cmd.opts().skipOnboarding as boolean | undefined
   try {
+    const { enableTuiLogging } = await import('./logger.js')
+    enableTuiLogging()
     const React = await import('react')
     const { render } = await import('ink')
     const { App } = await import('./tui/app.js')
-    render(React.createElement(App, { cwd: process.cwd() }))
+    render(React.createElement(App, { cwd: process.cwd(), skipOnboarding }))
   } catch (err) {
     logger.error({ err }, 'Failed to start TUI')
     process.exit(1)
   }
 })
-
 // ─── Bootstrap ───
 
 loadSecrets()

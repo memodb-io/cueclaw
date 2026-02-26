@@ -193,6 +193,7 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
       if (signal?.aborted) {
         for (const id of remaining) {
           completed.set(id, { status: 'skipped', error: 'Aborted' })
+          onProgress?.(id, { status: 'skipped' })
         }
         remaining.clear()
         runFailed = true
