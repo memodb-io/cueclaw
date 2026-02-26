@@ -1,8 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { _initTestDatabase } from './db.js'
 import { MessageRouter } from './router.js'
 import type { Channel } from './types.js'
 import type { CueclawConfig } from './config.js'
+
+vi.mock('./anthropic-client.js', () => ({
+  createAnthropicClient: vi.fn(),
+}))
 
 function createMockChannel(name: string): Channel & { sentMessages: Array<{ jid: string; text: string }> } {
   const sentMessages: Array<{ jid: string; text: string }> = []
@@ -86,5 +90,83 @@ describe('MessageRouter', () => {
     router.start()
     // Just verify start/stop doesn't throw
     router.stop()
+  })
+
+  describe('classifyAndRoute', () => {
+    it('routes casual chat to chat_reply instead of workflow generation', async () => {
+      const { createAnthropicClient } = await import('./anthropic-client.js')
+      const mockCreate = vi.fn().mockResolvedValue({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'chat_reply',
+            input: { message: 'Hello! I can help you automate tasks.' },
+          },
+        ],
+      })
+      ;(createAnthropicClient as Mock).mockReturnValue({ messages: { create: mockCreate } })
+
+      await router.handleInbound('test', 'user1', 'hello')
+      expect(channel.sentMessages).toHaveLength(1)
+      expect(channel.sentMessages[0]!.text).toBe('Hello! I can help you automate tasks.')
+    })
+
+    it('routes workflow requests to plan generation', async () => {
+      const { createAnthropicClient } = await import('./anthropic-client.js')
+      const mockCreate = vi.fn().mockResolvedValue({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'create_workflow_request',
+            input: {},
+          },
+        ],
+      })
+      ;(createAnthropicClient as Mock).mockReturnValue({ messages: { create: mockCreate } })
+
+      // This will try to call generatePlan which will fail, but we can verify it got past classification
+      await router.handleInbound('test', 'user1', 'monitor my website every 5 minutes')
+      // Should see "Generating execution plan..." followed by a failure (since generatePlan isn't mocked)
+      expect(channel.sentMessages[0]!.text).toBe('Generating execution plan...')
+    })
+
+    it('falls back to workflow on classification error', async () => {
+      const { createAnthropicClient } = await import('./anthropic-client.js')
+      const mockCreate = vi.fn().mockRejectedValue(new Error('API error'))
+      ;(createAnthropicClient as Mock).mockReturnValue({ messages: { create: mockCreate } })
+
+      await router.handleInbound('test', 'user1', 'do something')
+      expect(channel.sentMessages[0]!.text).toBe('Generating execution plan...')
+    })
+  })
+
+  describe('handleCallbackAction', () => {
+    it('maps confirm action to yes and handles confirmation', async () => {
+      // Set up a pending confirmation first
+      const { createAnthropicClient } = await import('./anthropic-client.js')
+      const mockCreate = vi.fn().mockResolvedValue({
+        content: [{ type: 'tool_use', id: 'toolu_1', name: 'create_workflow_request', input: {} }],
+      })
+      ;(createAnthropicClient as Mock).mockReturnValue({ messages: { create: mockCreate } })
+
+      // Spy on handleInbound to verify it's called with mapped text
+      const spy = vi.spyOn(router, 'handleInbound')
+      await router.handleCallbackAction('test', 'user1', 'wf-123', 'confirm')
+      expect(spy).toHaveBeenCalledWith('test', 'user1', { text: 'yes', sender: 'user1' })
+    })
+
+    it('maps cancel action to no', async () => {
+      const spy = vi.spyOn(router, 'handleInbound')
+      await router.handleCallbackAction('test', 'user1', 'wf-123', 'cancel')
+      expect(spy).toHaveBeenCalledWith('test', 'user1', { text: 'no', sender: 'user1' })
+    })
+
+    it('maps modify action to modify', async () => {
+      const spy = vi.spyOn(router, 'handleInbound')
+      await router.handleCallbackAction('test', 'user1', 'wf-123', 'modify')
+      expect(spy).toHaveBeenCalledWith('test', 'user1', { text: 'modify', sender: 'user1' })
+    })
   })
 })

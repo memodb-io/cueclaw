@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import type { Channel, NewMessage, Workflow } from './types.js'
 import { generatePlan, modifyPlan, confirmPlan, rejectPlan } from './planner.js'
 import { executeWorkflow } from './executor.js'
+import { createAnthropicClient } from './anthropic-client.js'
 import type { CueclawConfig } from './config.js'
 import { listWorkflows, getWorkflow, updateWorkflowPhase } from './db.js'
 import { logger } from './logger.js'
@@ -75,7 +76,7 @@ export class MessageRouter {
     } else if (this.hasPendingConfirmation(chatJid)) {
       await this.handleConfirmation(channel, chatJid, text)
     } else {
-      await this.handleNewWorkflow(channel, chatJid, text)
+      await this.classifyAndRoute(channel, chatJid, text)
     }
   }
 
@@ -150,6 +151,58 @@ export class MessageRouter {
 
       default:
         await channel.sendMessage(chatJid, `Unknown command: ${command}. Type /help for available commands.`)
+    }
+  }
+
+  async handleCallbackAction(channelName: string, chatId: string, _workflowId: string, action: string): Promise<void> {
+    const actionMap: Record<string, string> = {
+      confirm: 'yes',
+      modify: 'modify',
+      cancel: 'no',
+    }
+    const mappedText = actionMap[action] ?? action
+    await this.handleInbound(channelName, chatId, { text: mappedText, sender: chatId })
+  }
+
+  private async classifyAndRoute(channel: Channel, chatJid: string, text: string): Promise<void> {
+    try {
+      const client = createAnthropicClient(this.config)
+      const response = await client.messages.create({
+        model: this.config.claude.planner.model,
+        max_tokens: 512,
+        system: 'You are a router for CueClaw, a workflow automation tool. Classify the user message and call the appropriate tool. Use create_workflow_request if the user wants to automate a task, set up a workflow, schedule something, or perform an action that requires multiple steps. Use chat_reply for greetings, questions about capabilities, casual conversation, or anything that is not a workflow request.',
+        messages: [{ role: 'user', content: text }],
+        tools: [
+          {
+            name: 'create_workflow_request',
+            description: 'The user wants to create an automation workflow',
+            input_schema: { type: 'object' as const, properties: {} },
+          },
+          {
+            name: 'chat_reply',
+            description: 'Reply to casual conversation or questions',
+            input_schema: {
+              type: 'object' as const,
+              properties: {
+                message: { type: 'string', description: 'The reply to send to the user' },
+              },
+              required: ['message'],
+            },
+          },
+        ],
+        tool_choice: { type: 'any' },
+      })
+
+      const toolUse = response.content.find((b) => b.type === 'tool_use')
+      if (toolUse && toolUse.type === 'tool_use' && toolUse.name === 'chat_reply') {
+        const input = toolUse.input as { message?: string }
+        await channel.sendMessage(chatJid, input.message ?? "I'm CueClaw, a workflow automation tool. Send me a task description and I'll create a plan for you!")
+      } else {
+        await this.handleNewWorkflow(channel, chatJid, text)
+      }
+    } catch (err) {
+      logger.error({ err, chatJid }, 'Classification failed, falling back to workflow')
+      await this.handleNewWorkflow(channel, chatJid, text)
     }
   }
 

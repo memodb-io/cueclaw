@@ -43,6 +43,7 @@ export async function startDaemon(): Promise<void> {
       )
       router.registerChannel(tg)
       await tg.connect()
+      tg.onCallback((wfId, action, chatId) => router.handleCallbackAction('telegram', chatId, wfId, action))
       logger.info('Telegram channel started')
     } catch (err) {
       logger.error({ err }, 'Failed to start Telegram channel')

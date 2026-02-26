@@ -90,6 +90,7 @@ async function connectBotChannels(
       )
       router.registerChannel(tg)
       await tg.connect()
+      tg.onCallback((wfId, action, chatId) => router.handleCallbackAction('telegram', chatId, wfId, action))
       botChannels.push(tg)
       logger.info('Telegram channel started (in-process)')
     } catch (err) {

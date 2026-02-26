@@ -499,6 +499,7 @@ botCmd.command('start')
         )
         router.registerChannel(tg)
         await tg.connect()
+        tg.onCallback((wfId, action, chatId) => router.handleCallbackAction('telegram', chatId, wfId, action))
         logger.info('Telegram channel started')
       }
 
