@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { Box, Text, useStdout } from 'ink'
+import { useKeypress, KeyPriority } from './use-keypress.js'
+import { keyBindings } from './key-bindings.js'
 import { TextInput, PasswordInput, ConfirmInput, Spinner, StatusMessage } from '@inkjs/ui'
 import { validateAuth } from '../setup-auth.js'
 import { checkEnvironment } from '../setup-environment.js'
@@ -42,10 +44,11 @@ interface OnboardingState {
 
 interface OnboardingProps {
   onComplete: (config: CueclawConfig) => void
+  onCancel?: () => void
   issues?: import('../config.js').ConfigIssue[]
 }
 
-export function Onboarding({ onComplete, issues }: OnboardingProps) {
+export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
   const { stdout } = useStdout()
   const cols = stdout?.columns ?? 80
 
@@ -74,6 +77,16 @@ export function Onboarding({ onComplete, issues }: OnboardingProps) {
   })
 
   const env = checkEnvironment()
+
+  // ─── Esc to cancel (only when re-entering via /setup) ───
+
+  useKeypress('onboarding-cancel', KeyPriority.Normal, useCallback((input, key) => {
+    if (onCancel && keyBindings.escape(input, key)) {
+      onCancel()
+      return true
+    }
+    return false
+  }, [onCancel]))
 
   // ─── Navigation helpers ───
 
@@ -271,6 +284,11 @@ export function Onboarding({ onComplete, issues }: OnboardingProps) {
 
   return (
     <Box flexDirection="column" paddingX={1} flexGrow={1}>
+      {onCancel && (
+        <Box justifyContent="flex-end">
+          <Text dimColor>Press Esc to cancel</Text>
+        </Box>
+      )}
       {/* ── Welcome ── */}
       {step === 'welcome' && (
         <StepLayout

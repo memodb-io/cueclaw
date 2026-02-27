@@ -1,0 +1,21 @@
+// Import all commands to register them
+import './help.js'
+import './list.js'
+import './status.js'
+import './pause.js'
+import './resume.js'
+import './delete.js'
+import './config.js'
+import './daemon.js'
+import './info.js'
+import './clear.js'
+import './new.js'
+import './cancel.js'
+import './bot.js'
+import './setup.js'
+import './theme.js'
+import './quit.js'
+
+// Re-export registry functions and types
+export { getCommands, findCommand, parseSlashCommand, registerCommand } from './registry.js'
+export type { CommandContext, SlashCommand } from './types.js'

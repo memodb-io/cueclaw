@@ -3,19 +3,66 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, cleanup } from 'ink-testing-library'
 import { ThemeProvider } from '@inkjs/ui'
 import { cueclawTheme } from './theme.js'
+import { KeypressProvider } from './use-keypress.js'
 import { Chat, type ChatMessage } from './chat.js'
+import { UIStateContext, type UIState } from './ui-state-context.js'
+import { UIActionsContext, type UIActions } from './ui-actions-context.js'
 
 afterEach(cleanup)
 
-function renderChat(props: Partial<React.ComponentProps<typeof Chat>> = {}) {
-  const defaults = {
-    messages: [] as ChatMessage[],
+function createMockUIState(overrides: Partial<UIState> = {}): UIState {
+  return {
+    view: 'chat',
+    messages: [],
+    workflow: null,
     isGenerating: false,
-    onSubmit: vi.fn(),
+    stepProgress: new Map(),
+    executionOutput: [],
+    streamingText: '',
+    daemonStatus: 'none',
+    isExecuting: false,
+    config: null,
+    cwd: '/test',
+    footerExtra: '',
+    footerHints: undefined,
+    isConversing: false,
+    themeVersion: 0,
+    statusWorkflows: [],
+    ...overrides,
   }
+}
+
+function createMockUIActions(overrides: Partial<UIActions> = {}): UIActions {
+  return {
+    handleChatSubmit: vi.fn(),
+    handleCancelGeneration: vi.fn(),
+    handleConfirm: vi.fn(),
+    handleModify: vi.fn(),
+    handleCancel: vi.fn(),
+    handleExecutionAbort: vi.fn(),
+    handleExecutionBack: vi.fn(),
+    handleOnboardingComplete: vi.fn(),
+    handleOnboardingCancel: vi.fn(),
+    handleStatusBack: vi.fn(),
+    handleStatusSelect: vi.fn(),
+    handleStatusStop: vi.fn(),
+    handleStatusDelete: vi.fn(),
+    ...overrides,
+  }
+}
+
+function renderChat(stateOverrides: Partial<UIState> = {}, actionOverrides: Partial<UIActions> = {}) {
+  const state = createMockUIState(stateOverrides)
+  const actions = createMockUIActions(actionOverrides)
   return render(
     <ThemeProvider theme={cueclawTheme}>
-      <Chat {...defaults} {...props} />
+      <KeypressProvider>
+        <UIStateContext.Provider value={state}>
+          <UIActionsContext.Provider value={actions}>
+            <Chat />
+          </UIActionsContext.Provider>
+        </UIStateContext.Provider>
+      </KeypressProvider>
     </ThemeProvider>
   )
 }
@@ -26,20 +73,20 @@ describe('Chat component rendering', () => {
     const frame = lastFrame()!
     expect(frame).toContain('>')
     expect(frame).toContain('/help')
-    expect(frame).toContain('Ctrl+C')
   })
 
   it('renders user messages with "You:" prefix', () => {
     const messages: ChatMessage[] = [
-      { role: 'user', text: 'Hello world' },
+      { type: 'user', text: 'Hello world' },
     ]
     const { lastFrame } = renderChat({ messages })
-    expect(lastFrame()!).toContain('You: Hello world')
+    expect(lastFrame()!).toContain('Hello world')
+    expect(lastFrame()!).toContain('>')
   })
 
   it('renders system messages without prefix', () => {
     const messages: ChatMessage[] = [
-      { role: 'system', text: 'Daemon started.' },
+      { type: 'system', text: 'Daemon started.' },
     ]
     const { lastFrame } = renderChat({ messages })
     expect(lastFrame()!).toContain('Daemon started.')
@@ -47,30 +94,55 @@ describe('Chat component rendering', () => {
 
   it('renders assistant text messages with "CueClaw:" prefix', () => {
     const messages: ChatMessage[] = [
-      { role: 'assistant', text: 'How can I help?' },
+      { type: 'assistant', text: 'How can I help?' },
     ]
     const { lastFrame } = renderChat({ messages })
-    expect(lastFrame()!).toContain('CueClaw: How can I help?')
+    expect(lastFrame()!).toContain('How can I help?')
+    expect(lastFrame()!).toContain('✦')
   })
 
   it('renders assistant messages with JSX content', () => {
     const messages: ChatMessage[] = [
       {
-        role: 'assistant',
+        type: 'assistant-jsx',
         content: React.createElement('ink-text', null, 'Custom content'),
       },
     ]
     const { lastFrame } = renderChat({ messages })
     const frame = lastFrame()!
-    expect(frame).toContain('CueClaw:')
+    expect(frame).toContain('✦')
     expect(frame).toContain('Custom content')
+  })
+
+  it('renders error messages', () => {
+    const messages: ChatMessage[] = [
+      { type: 'error', text: 'Something went wrong' },
+    ]
+    const { lastFrame } = renderChat({ messages })
+    expect(lastFrame()!).toContain('Something went wrong')
+  })
+
+  it('renders warning messages', () => {
+    const messages: ChatMessage[] = [
+      { type: 'warning', text: 'Be careful' },
+    ]
+    const { lastFrame } = renderChat({ messages })
+    expect(lastFrame()!).toContain('Be careful')
+  })
+
+  it('renders plan-ready messages', () => {
+    const messages: ChatMessage[] = [
+      { type: 'plan-ready', workflowName: 'My Workflow' },
+    ]
+    const { lastFrame } = renderChat({ messages })
+    expect(lastFrame()!).toContain('My Workflow')
   })
 
   it('renders multiple messages in order', () => {
     const messages: ChatMessage[] = [
-      { role: 'user', text: 'First' },
-      { role: 'assistant', text: 'Second' },
-      { role: 'system', text: 'Third' },
+      { type: 'user', text: 'First' },
+      { type: 'assistant', text: 'Second' },
+      { type: 'system', text: 'Third' },
     ]
     const { lastFrame } = renderChat({ messages })
     const frame = lastFrame()!
@@ -81,10 +153,17 @@ describe('Chat component rendering', () => {
     expect(secondIdx).toBeLessThan(thirdIdx)
   })
 
-  it('shows spinner with "Thinking..." when generating', () => {
+  it('shows thinking indicator with elapsed time when generating', () => {
     const { lastFrame } = renderChat({ isGenerating: true })
     const frame = lastFrame()!
-    expect(frame).toContain('Thinking')
+    expect(frame).toContain('Thinking...')
+    expect(frame).toContain('0s')
+  })
+
+  it('shows cancel hint when onCancel is provided', () => {
+    const { lastFrame } = renderChat({ isGenerating: true })
+    const frame = lastFrame()!
+    expect(frame).toContain('esc to cancel')
   })
 
   it('hides input when generating', () => {
@@ -99,13 +178,14 @@ describe('Chat component rendering', () => {
       streamingText: 'Let me think about this...',
     })
     const frame = lastFrame()!
-    expect(frame).toContain('CueClaw: Let me think about this...')
+    expect(frame).toContain('Let me think about this...')
+    expect(frame).toContain('✦')
     expect(frame).not.toContain('Thinking')
   })
 
   it('renders custom footer hints', () => {
     const { lastFrame } = renderChat({
-      footerHints: 'Enter send · /cancel abort',
+      footerHints: 'Enter send \u00b7 /cancel abort',
     })
     expect(lastFrame()!).toContain('/cancel abort')
   })
@@ -116,12 +196,19 @@ describe('Chat component rendering', () => {
     })
     const frame = lastFrame()!
     expect(frame).toContain('Daemon active')
-    expect(frame).toContain('/help') // default hints still present
   })
 
   it('renders separator line', () => {
     const { lastFrame } = renderChat()
     const frame = lastFrame()!
-    expect(frame).toContain('─')
+    expect(frame).toContain('\u2500')
+  })
+
+  it('does not show scroll indicator when all messages visible', () => {
+    const messages: ChatMessage[] = [
+      { type: 'user', text: 'Hello' },
+    ]
+    const { lastFrame } = renderChat({ messages })
+    expect(lastFrame()!).not.toContain('more message')
   })
 })

@@ -1,6 +1,10 @@
-import { Box, Text, useInput } from 'ink'
-import { Spinner, useComponentTheme, type ComponentTheme } from '@inkjs/ui'
+import { useCallback } from 'react'
+import { Box, Text } from 'ink'
 import type { Workflow, StepStatus } from '../types.js'
+import { useKeypress, KeyPriority } from './use-keypress.js'
+import { theme as colors } from './theme/index.js'
+import { keyBindings } from './key-bindings.js'
+import { useUIState } from './ui-state-context.js'
 
 interface StepProgress {
   stepId: string
@@ -17,32 +21,33 @@ interface ExecutionViewProps {
 }
 
 export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort }: ExecutionViewProps) {
-  const { styles } = useComponentTheme<ComponentTheme>('PlanView')
-  const titleStyle = styles?.title?.() ?? { color: 'cyan', bold: true }
-
+  const { isExecuting } = useUIState()
+  // Local isRunning for display only (shows "Running" while any step has running status)
   const isRunning = Array.from(stepProgress.values()).some(s => s.status === 'running')
 
-  useInput((input, key) => {
-    if (isRunning && onAbort && input === 'x') {
+  useKeypress('execution-view-actions', KeyPriority.Normal, useCallback((input, key) => {
+    if (isExecuting && onAbort && keyBindings.abortExec(input, key)) {
       onAbort()
-      return
+      return true
     }
-    if (!isRunning && onBack && (key.return || input === 'q' || key.escape)) {
+    if (!isExecuting && onBack && (keyBindings.submit(input, key) || keyBindings.quit(input, key) || keyBindings.escape(input, key))) {
       onBack()
+      return true
     }
-  })
+    return false
+  }, [isExecuting, onAbort, onBack]))
 
   return (
     <Box flexDirection="column" paddingX={1} flexGrow={1}>
       {/* Content area — grows to push actions to bottom */}
       <Box flexDirection="column" flexGrow={1}>
         <Box justifyContent="space-between">
-          <Text {...titleStyle}>Workflow: {workflow.name}</Text>
-          <Text dimColor>Status: {isRunning ? 'Running' : 'Complete'}</Text>
+          <Text color={colors.border.accent} bold>Workflow: {workflow.name}</Text>
+          <Text color={colors.ui.comment}>Status: {isRunning ? 'Running' : 'Complete'}</Text>
         </Box>
         <Text>{''}</Text>
 
-        <Text bold>Steps:</Text>
+        <Text bold color={colors.text.primary}>Steps:</Text>
         {workflow.steps.map((step, i) => {
           const progress = stepProgress.get(step.id)
           const status = progress?.status ?? 'pending'
@@ -54,16 +59,15 @@ export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort 
               <Text color={statusColor(status)}>
                 {icon} {i + 1}. {step.description}{durationText}
               </Text>
-              {status === 'running' && <Spinner />}
             </Box>
           )
         })}
 
         {output.length > 0 && (
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>── Live Output ──</Text>
+          <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={colors.border.default} paddingX={1}>
+            <Text color={colors.ui.comment}>Live Output</Text>
             {output.slice(-10).map((line, i) => (
-              <Text key={i} dimColor>{line}</Text>
+              <Text key={i} color={colors.text.secondary}>{line}</Text>
             ))}
           </Box>
         )}
@@ -71,8 +75,8 @@ export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort 
 
       {/* Actions — pinned to bottom */}
       <Box marginTop={1}>
-        <Text dimColor>
-          {isRunning ? 'Press [X] to cancel' : 'Press Enter, Q, or Esc to return to chat'}
+        <Text color={colors.ui.comment}>
+          {isExecuting ? 'Press [X] to cancel' : 'Press Enter, Q, or Esc to return to chat'}
         </Text>
       </Box>
     </Box>
@@ -82,20 +86,20 @@ export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort 
 function statusIcon(status: StepStatus): string {
   switch (status) {
     case 'succeeded': return '✓'
-    case 'running': return '●'
+    case 'running': return '⊷'
     case 'failed': return '✗'
     case 'skipped': return '○'
-    default: return ' '
+    default: return '○'
   }
 }
 
 function statusColor(status: StepStatus): string {
   switch (status) {
-    case 'succeeded': return 'green'
-    case 'running': return 'yellow'
-    case 'failed': return 'red'
-    case 'skipped': return 'gray'
-    default: return 'gray'
+    case 'succeeded': return colors.status.success
+    case 'running': return colors.status.warning
+    case 'failed': return colors.status.error
+    case 'skipped': return colors.status.muted
+    default: return colors.status.muted
   }
 }
 

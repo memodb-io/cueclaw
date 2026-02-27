@@ -1,6 +1,9 @@
-import { useState } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { useState, useCallback, useEffect } from 'react'
+import { Box, Text } from 'ink'
 import type { Workflow, WorkflowPhase } from '../types.js'
+import { useKeypress, KeyPriority } from './use-keypress.js'
+import { theme as colors } from './theme/index.js'
+import { keyBindings } from './key-bindings.js'
 
 interface StatusProps {
   workflows: Workflow[]
@@ -17,10 +20,16 @@ export function Status({ workflows, onSelect, onBack, onStop, onDelete }: Status
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  useInput((input, key) => {
+  useEffect(() => {
+    if (!message) return
+    const timer = setTimeout(() => setMessage(null), 3000)
+    return () => clearTimeout(timer)
+  }, [message])
+
+  useKeypress('status-view', KeyPriority.Normal, useCallback((input, key) => {
     // Handle confirmation prompt
     if (confirm) {
-      if (input.toLowerCase() === 'y') {
+      if (keyBindings.confirmYes(input, key)) {
         const wf = workflows.find(w => w.id === confirm.workflowId)
         if (wf) {
           if (confirm.type === 'stop' && onStop) {
@@ -32,37 +41,42 @@ export function Status({ workflows, onSelect, onBack, onStop, onDelete }: Status
           }
         }
         setConfirm(null)
-      } else if (input.toLowerCase() === 'n' || key.escape) {
+        return true
+      } else if (keyBindings.confirmNo(input, key)) {
         setConfirm(null)
+        return true
       }
-      return
+      return true
     }
 
     // Clear message on any key
     if (message) setMessage(null)
 
-    if (key.upArrow && selectedIndex > 0) setSelectedIndex(selectedIndex - 1)
-    if (key.downArrow && selectedIndex < workflows.length - 1) setSelectedIndex(selectedIndex + 1)
-    if (key.return && workflows.length > 0) onSelect(workflows[selectedIndex]!)
+    if (keyBindings.upArrow(input, key) && selectedIndex > 0) { setSelectedIndex(selectedIndex - 1); return true }
+    if (keyBindings.downArrow(input, key) && selectedIndex < workflows.length - 1) { setSelectedIndex(selectedIndex + 1); return true }
+    if (keyBindings.submit(input, key) && workflows.length > 0) { onSelect(workflows[selectedIndex]!); return true }
 
     const selected = workflows[selectedIndex]
-    if (input === 's' && onStop && selected && (selected.phase === 'executing' || selected.phase === 'active')) {
+    if (keyBindings.stopWorkflow(input, key) && onStop && selected && (selected.phase === 'executing' || selected.phase === 'active')) {
       setConfirm({ type: 'stop', workflowId: selected.id })
+      return true
     }
-    if (input === 'x' && onDelete && selected) {
+    if (keyBindings.deleteWorkflow(input, key) && onDelete && selected) {
       setConfirm({ type: 'delete', workflowId: selected.id })
+      return true
     }
-    if (key.escape || input === 'q') onBack()
-  })
+    if (keyBindings.escape(input, key) || keyBindings.quit(input, key)) { onBack(); return true }
+    return false
+  }, [confirm, message, selectedIndex, workflows, onSelect, onBack, onStop, onDelete]))
 
   const phaseColor = (phase: WorkflowPhase): string => {
     switch (phase) {
-      case 'executing': return 'yellow'
-      case 'active': return 'green'
-      case 'completed': return 'green'
-      case 'failed': return 'red'
-      case 'paused': return 'gray'
-      default: return 'white'
+      case 'executing': return colors.status.warning
+      case 'active': return colors.status.success
+      case 'completed': return colors.status.success
+      case 'failed': return colors.status.error
+      case 'paused': return colors.status.muted
+      default: return colors.text.primary
     }
   }
 
@@ -70,7 +84,7 @@ export function Status({ workflows, onSelect, onBack, onStop, onDelete }: Status
     <Box flexDirection="column" paddingX={1} flexGrow={1}>
       {/* Content — grows to push actions to bottom */}
       <Box flexDirection="column" flexGrow={1}>
-        <Text bold color="cyan">Workflows</Text>
+        <Text bold color={colors.border.accent}>Workflows</Text>
         <Text>{''}</Text>
 
         {workflows.length === 0 ? (
@@ -96,11 +110,10 @@ export function Status({ workflows, onSelect, onBack, onStop, onDelete }: Status
       </Box>
 
       {/* Actions — pinned to bottom */}
-      <Box marginTop={1}>
-        {message ? (
-          <Text bold color="red">{message}</Text>
-        ) : confirm ? (
-          <Text bold color="yellow">{confirm.type === 'stop' ? 'Stop' : 'Delete'} workflow {confirm.workflowId.slice(0, 12)}? [Y]es / [N]o</Text>
+      <Box flexDirection="column" marginTop={1}>
+        {message && <Text bold color={colors.status.success}>{message}</Text>}
+        {confirm ? (
+          <Text bold color={colors.status.warning}>{confirm.type === 'stop' ? 'Stop' : 'Delete'} workflow {confirm.workflowId.slice(0, 12)}? [Y]es / [N]o</Text>
         ) : (
           <Text dimColor>[Enter] View  [S] Stop  [X] Delete  [Q] Back</Text>
         )}

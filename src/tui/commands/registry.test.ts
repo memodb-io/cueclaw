@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { parseSlashCommand, findCommand, getCommands, type CommandContext } from './commands.js'
-import { _initTestDatabase } from '../db.js'
-import { insertWorkflow } from '../db.js'
-import type { Workflow } from '../types.js'
+import { parseSlashCommand, findCommand, getCommands } from './index.js'
+import type { CommandContext } from './types.js'
+import { _initTestDatabase } from '../../db.js'
+import { insertWorkflow } from '../../db.js'
+import type { Workflow } from '../../types.js'
 import type Database from 'better-sqlite3'
 
 // ─── parseSlashCommand ───
@@ -80,6 +81,8 @@ describe('getCommands', () => {
     expect(names).toContain('new')
     expect(names).toContain('bot')
     expect(names).toContain('setup')
+    // New theme command
+    expect(names).toContain('theme')
   })
 })
 
@@ -135,7 +138,8 @@ describe('command execution', () => {
     expect(messages[0].text).toContain('/list')
   })
 
-  // /list, /status, /clear are handled in use-command-dispatch.ts — execute is a no-op
+  // /list, /status, /clear, /cancel, /new, /bot, /setup are handled in use-command-dispatch.ts
+  // Their execute() bodies are no-ops — just verify registration
   it('/list is registered and execute is a no-op', () => {
     const { ctx, messages } = makeContext(db)
     findCommand('list')!.execute('', ctx)
@@ -222,5 +226,28 @@ describe('command execution', () => {
     messages.length = 0
     findCommand('delete')!.execute('', ctx)
     expect(messages[0].text).toContain('Usage')
+  })
+
+  it('/theme shows current theme when no args', () => {
+    const { ctx, messages } = makeContext(db)
+    findCommand('theme')!.execute('', ctx)
+    expect(messages).toHaveLength(1)
+    expect(messages[0].text).toContain('Current theme')
+    expect(messages[0].text).toContain('dark')
+  })
+
+  it('/theme switches to valid theme', () => {
+    const { ctx, messages } = makeContext(db)
+    findCommand('theme')!.execute('dracula', ctx)
+    expect(messages).toHaveLength(1)
+    expect(messages[0].text).toContain('Switched to dracula')
+  })
+
+  it('/theme errors on invalid theme', () => {
+    const { ctx, messages } = makeContext(db)
+    findCommand('theme')!.execute('nonexistent', ctx)
+    expect(messages).toHaveLength(1)
+    expect(messages[0].type).toBe('error')
+    expect(messages[0].text).toContain('Unknown theme')
   })
 })
