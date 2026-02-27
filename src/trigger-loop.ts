@@ -115,19 +115,23 @@ export class TriggerLoop {
     this.queue.enqueue(workflow.id, async () => {
       this.log.info({ workflowId: workflow.id }, 'Executing triggered workflow')
       try {
-        await executeWorkflow({
+        const result = await executeWorkflow({
           workflow,
           triggerData,
           db: this.db,
           cwd: this.cwd,
-          onProgress: (_stepId, msg) => {
-            if (typeof msg === 'object' && msg?.type === 'step_complete') {
-              this.router.broadcastNotification(`Step completed: ${_stepId} (${workflow.name})`)
-            }
-          },
         })
-        this.log.info({ workflowId: workflow.id }, 'Triggered workflow completed')
-        this.router.broadcastNotification(`Workflow complete: ${workflow.name}`)
+        if (result.status === 'failed') {
+          const failedSteps = [...result.results.entries()]
+            .filter(([, r]) => r.status === 'failed' && r.error)
+            .map(([id, r]) => `${id}: ${r.error}`)
+          const errorDetail = failedSteps.length > 0 ? ` — ${failedSteps.join('; ')}` : ''
+          this.log.error({ workflowId: workflow.id, status: 'failed' }, 'Triggered workflow failed')
+          this.router.broadcastNotification(`Workflow failed: ${workflow.name}${errorDetail}`)
+        } else {
+          this.log.info({ workflowId: workflow.id }, 'Triggered workflow completed')
+          this.router.broadcastNotification(`Workflow complete: ${workflow.name}`)
+        }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         this.log.error({ workflowId: workflow.id, err }, 'Triggered execution failed')
