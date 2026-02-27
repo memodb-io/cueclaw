@@ -26,10 +26,25 @@ The Planner is the most critical module — it converts natural language to exec
 
 **Output strategy: Structured Output via tool_use**
 
+The planner supports two modes:
+
+1. **Single-turn** (`generatePlan`): Direct NL → Workflow generation via `create_workflow` tool with forced `tool_choice`
+2. **Multi-turn** (`PlannerSession`): Iterative conversation using three tools:
+   - `ask_question` — Ask clarifying questions (returns question to user, waits for reply)
+   - `set_secret` — Store credentials in env (auto-continues the conversation)
+   - `create_workflow` — Generate final `PlannerOutput` when requirements are clear
+
+The multi-turn session is the primary flow used by `MessageRouter` and TUI. Single-turn `generatePlan` is available for direct invocation (e.g., `/new` command).
+
+**Implementation details:**
+
 - [ ] Define `create_workflow` tool with **`PlannerOutput`** JSON Schema as `input_schema` (excludes framework fields: id, phase, timestamps)
-- [ ] Call Claude API with `tool_choice: { type: 'tool', name: 'create_workflow' }` to force structured output
+- [ ] Define `ask_question` tool for multi-turn clarification
+- [ ] Define `set_secret` tool for credential storage (auto-continues via recursive `runPlannerTurn()`)
+- [ ] Single-turn: Call Claude API with `tool_choice: { type: 'tool', name: 'create_workflow' }` to force structured output
+- [ ] Multi-turn: Call Claude API with `tool_choice: 'auto'`, allowing the LLM to choose between the three tools
 - [ ] System prompt: describe the execution environment, rules for step IDs, DAG constraints, `$steps` / `$trigger_data` reference syntax
-- [ ] Include user identity from config in system prompt
+- [ ] Include user identity and available credentials from config in system prompt
 - [ ] Validation pipeline: Zod parse → DAG validation (no cycles, valid `depends_on` refs) → `$steps` / `$trigger_data` reference check
 - [ ] Retry loop: up to 2 retries with error feedback injected into the prompt for self-correction
 - [ ] After validation passes, framework fills in `id`, `phase`, `schema_version`, `created_at`, `updated_at` to produce the complete `Workflow`

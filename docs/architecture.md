@@ -208,6 +208,11 @@ The TUI uses a `DaemonBridge` abstraction to decouple from the backend daemon:
 - **External mode** (`isExternal: true`): A system service daemon (launchd/systemd) is running — TUI acts as frontend only
 - **In-process mode** (`isExternal: false`): No external daemon — TUI starts `TriggerLoop`, `MessageRouter`, and bot channels in-process
 
+**Discovery mechanism:** At startup, `initDaemonBridge()` calls `getServiceStatus()` from `src/service.ts`, which checks the OS service manager:
+- **macOS**: `launchctl list com.cueclaw` — looks for `"PID"` in output to determine if running
+- **Linux**: `systemctl --user is-active cueclaw` — checks if systemd reports `active`
+- If the command fails or service is not installed, returns `'stopped'` (falls back to in-process mode)
+
 Bot channels (Telegram/WhatsApp) can be started lazily via `startBotChannels()` after user confirmation, avoiding startup delays (e.g., WhatsApp QR scan).
 
 ## TUI Architecture

@@ -38,7 +38,7 @@ Confirm the plan, and CueClaw runs it continuously in the background as a daemon
 - **Multi-channel** — TUI, WhatsApp, or Telegram. All channels share identical capabilities.
 - **Triggers** — Poll scripts, cron schedules, or manual. Runs as a system service with auto-restart.
 - **Parallel DAG execution** — Independent steps run concurrently. Dependencies are respected.
-- **Container isolation** — Agents run in Docker with filesystem isolation and mount allowlists.
+- **Container isolation** (optional) — Agents can run in Docker with filesystem isolation and mount allowlists. Defaults to local mode with PreToolUse hooks for permission control.
 
 ## Install
 

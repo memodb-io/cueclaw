@@ -96,6 +96,28 @@ interface FailurePolicy {
   max_retries: number           // Default 0
   retry_delay_ms: number        // Default 5000, exponential backoff ×2
 }
+```
+
+**`on_step_failure` behavior:**
+
+| Policy | Behavior |
+|--------|----------|
+| `stop` | Halt the entire run immediately. No further steps execute. |
+| `skip_dependents` | The failed step is marked `failed`. All steps that transitively depend on it (via `depends_on`) are automatically marked `skipped`. Independent steps continue executing normally. |
+| `ask_user` | Pause execution and notify the user via connected channels. Wait for user decision (retry/skip/abort). |
+
+**`skip_dependents` example:**
+
+```
+Step A (failed)
+  ├── Step B (depends_on: [A]) → skipped
+  │   └── Step D (depends_on: [B]) → skipped (transitive)
+  └── Step C (depends_on: []) → runs normally (independent)
+```
+
+When the executor finds ready steps, it checks each step's `depends_on` list. If any dependency has status `failed` or `skipped`, the step is automatically skipped. This propagates transitively through the DAG.
+
+```typescript
 
 type TriggerConfig =
   | { type: 'poll'; interval_seconds: number; check_script: string; diff_mode: 'new_items' | 'any_change' }
@@ -417,6 +439,16 @@ CREATE TABLE sessions (
   last_used_at  TEXT NOT NULL,
   is_active     INTEGER NOT NULL DEFAULT 1
 );
+```
+
+**Session resume constraints:**
+
+- Sessions are **per-step**, not per-run — each step gets its own isolated session to prevent context pollution
+- Session resume is only supported for **retrying the same step** (same `step_run_id`), never across different steps
+- Data passes between steps via `$steps.{id}.output` references, not shared session context
+- Resume is best-effort: if the SDK session has expired or been compacted, the step runs fresh
+
+```sql
 
 CREATE TABLE trigger_state (
   workflow_id   TEXT PRIMARY KEY REFERENCES workflows(id),

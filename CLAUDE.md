@@ -47,6 +47,17 @@ TUI: Onboarding → Chat (slash commands) → Plan View → Execution View
 - [docs/testing.md](docs/testing.md) — Test strategy, mock patterns, CI
 - [docs/references.md](docs/references.md) — NanoClaw source index, design references
 
+## Development Workflow
+
+When implementing code changes, always follow **docs-first** order:
+
+1. **Read** `PLAN.md`, relevant `plans/` phase docs, and `docs/` to understand the current design
+2. **Update** `PLAN.md`, `plans/`, and `docs/` first — reflect the new design, types, or behavior before writing code
+3. **Implement** the code changes
+4. **Update** `CLAUDE.md` if key concepts, conventions, or project status changed
+
+Never write code that contradicts existing documentation. If the design needs to change, update the docs first.
+
 ## Conventions
 
 - Flat `src/` layout — no deep nesting, only `channels/` and `tui/` subdirectories

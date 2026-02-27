@@ -43,9 +43,9 @@ container:
   idle_timeout: 1800000            # 30 min idle timeout
   network: none                    # 'none' | 'host' | 'bridge'
     # none: no network (most secure, default)
-    # bridge: workflows needing external API calls (e.g., gh, curl)
+    # bridge: workflows needing external API calls (e.g., gh, curl) — recommended for most workflows
     # host: full host network access (least secure)
-    # Can be overridden per-workflow in the workflow's container config
+    # Note: most workflows need network access (GitHub API, curl, etc.) — set to 'bridge' for those
 ```
 
 **Config priority** (low → high): `~/.cueclaw/config.yaml` → `./.cueclaw/config.yaml` → env vars → CLI args

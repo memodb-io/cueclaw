@@ -36,7 +36,7 @@ All dependencies use latest versions. `pnpm-lock.yaml` handles reproducibility.
 | Milestone | Content | Acceptance Criteria |
 |-----------|---------|-------------------|
 | **M0** | Scaffolding + CLI + Config | `cueclaw` command runs, loads config, SQLite ready |
-| **M1** | Planner + Plan Confirmation | NL → plan (tool_use) → display → confirm/modify/cancel |
+| **M1** | Planner + Plan Confirmation | NL → multi-turn planner (ask_question/set_secret/create_workflow) → display → confirm/modify/cancel |
 | **M2** | Container Isolation | Docker execution, IPC, MCP tools, mount security, `cueclaw setup` |
 | **M3** | TUI Interface | Ink TUI for conversational workflow creation + management |
 | **M4** | Bot Channels | WhatsApp + Telegram with same capabilities as TUI |
@@ -48,7 +48,7 @@ All dependencies use latest versions. `pnpm-lock.yaml` handles reproducibility.
 Implementation phases. Phase 3 and Phase 4 are independent and can be developed in parallel.
 
 1. **[Phase 0: Project Scaffolding](plans/phase-0-scaffolding.md)** — CLI, config, database, logging, types
-2. **[Phase 1: Core Engine](plans/phase-1-core-engine.md)** — Planner, Executor (parallel DAG), Agent Runner, sessions
+2. **[Phase 1: Core Engine](plans/phase-1-core-engine.md)** — Multi-turn Planner (ask_question/set_secret/create_workflow), Executor (parallel DAG), Agent Runner, sessions
 3. **[Phase 2: Container Isolation](plans/phase-2-container-isolation.md)** — Docker execution, IPC, MCP tools, mount security (depends on Phase 1)
 4. **[Phase 3: TUI Interface](plans/phase-3-tui.md)** — Ink-based terminal UI (depends on Phase 0+1)
 5. **[Phase 4: Bot Channels](plans/phase-4-bot-channels.md)** — WhatsApp + Telegram (depends on Phase 0+1)
