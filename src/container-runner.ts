@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { loadConfig, cueclawHome } from './config.js'
+import { loadConfig, cueclawHome, getDefaultImage } from './config.js'
 import { loadMountAllowlist, validateAdditionalMounts, expandHome } from './mount-security.js'
 import { IpcWatcher, type IpcMessage } from './ipc.js'
 import { McpMessageHandler, type MessageRouter } from './mcp-server.js'
@@ -52,7 +52,7 @@ export async function runContainerAgent(opts: ContainerRunnerOpts): Promise<Step
   mkdirSync(join(opts.ipcDir, 'output'), { recursive: true })
 
   // Build Docker args
-  const image = config.container?.image ?? 'cueclaw-agent:latest'
+  const image = config.container?.image ?? getDefaultImage()
   const network = config.container?.network ?? 'none'
   const volumeMounts = buildVolumeMounts(opts)
 

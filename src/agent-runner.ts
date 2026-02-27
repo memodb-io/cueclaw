@@ -1,7 +1,7 @@
-import { loadConfig } from './config.js'
+import { loadConfig, getDefaultImage } from './config.js'
 import { checkBashSafety } from './hooks.js'
 import { runContainerAgent, prepareContainerOpts } from './container-runner.js'
-import { isDockerAvailable } from './container-runtime.js'
+import { isDockerAvailable, ensureDockerImage } from './container-runtime.js'
 import { logger } from './logger.js'
 import type { StepStatus } from './types.js'
 
@@ -32,11 +32,13 @@ export function runAgent(opts: {
 }): AgentHandle {
   const config = loadConfig()
 
-  // Container mode: enabled by default unless explicitly disabled
-  const containerEnabled = config.container?.enabled ?? true
+  // Container mode: opt-in — enable via config.yaml container.enabled: true
+  const containerEnabled = config.container?.enabled ?? false
   if (containerEnabled && opts.workflowId && opts.stepId && opts.runId) {
     if (!isDockerAvailable()) {
       logger.warn({ stepId: opts.stepId }, 'Docker not available, falling back to local execution')
+    } else if (!ensureDockerImage(config.container?.image ?? getDefaultImage())) {
+      logger.warn({ stepId: opts.stepId, image: config.container?.image ?? getDefaultImage() }, 'Docker image not available (pull failed), falling back to local execution')
     } else {
       logger.info({ stepId: opts.stepId, mode: 'container' }, 'Running agent in container mode')
       const containerOpts = prepareContainerOpts(

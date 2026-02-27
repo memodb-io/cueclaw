@@ -6,5 +6,13 @@ pnpm install
 pnpm build
 
 cd ..
-docker build -t cueclaw-agent:latest .
-echo "Container image built: cueclaw-agent:latest"
+
+# Read version from package.json
+VERSION=$(node -p "require('../package.json').version")
+
+docker build \
+  -t cueclaw-agent:latest \
+  -t "ghcr.io/memodb-io/cueclaw-agent:latest" \
+  -t "ghcr.io/memodb-io/cueclaw-agent:${VERSION}" \
+  .
+echo "Container image built: cueclaw-agent:latest, ghcr.io/memodb-io/cueclaw-agent:{latest,${VERSION}}"

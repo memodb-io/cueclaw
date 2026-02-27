@@ -1,6 +1,6 @@
 FROM node:22-slim
 
-RUN groupadd -g 1000 agent && useradd -u 1000 -g agent -m agent
+RUN groupadd -g 1000 agent 2>/dev/null || true && useradd -u 1000 -g 1000 -m agent 2>/dev/null || true
 
 WORKDIR /app/agent-runner
 COPY agent-runner/dist/ ./dist/

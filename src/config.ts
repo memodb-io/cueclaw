@@ -1,9 +1,14 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { createRequire } from 'node:module'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { z } from 'zod/v4'
 import { ConfigError } from './types.js'
+import { isDev } from './env.js'
+
+const require = createRequire(import.meta.url)
+const { version: pkgVersion } = require('../package.json') as { version: string }
 
 // ─── Zod Schema ───
 
@@ -35,8 +40,8 @@ const ConfigSchema = z.object({
     dir: z.string().default('~/.cueclaw/logs'),
   }).optional(),
   container: z.object({
-    enabled: z.boolean().default(true),
-    image: z.string().default('cueclaw-agent:latest'),
+    enabled: z.boolean().default(false),
+    image: z.string().default('ghcr.io/memodb-io/cueclaw-agent:latest'),
     timeout: z.number().default(1_800_000),
     max_output_size: z.number().default(10_485_760),
     idle_timeout: z.number().default(1_800_000),
@@ -45,6 +50,20 @@ const ConfigSchema = z.object({
 })
 
 export type CueclawConfig = z.infer<typeof ConfigSchema>
+
+// ─── Docker Image ───
+
+const GHCR_IMAGE = 'ghcr.io/memodb-io/cueclaw-agent'
+const DEV_IMAGE = 'cueclaw-agent:latest'
+
+/**
+ * Get the default Docker image name.
+ * - Dev mode (tsx): `cueclaw-agent:latest` — uses locally built image from `container/build.sh`
+ * - Production (dist): `ghcr.io/memodb-io/cueclaw-agent:{version}` — version-pinned GHCR image
+ */
+export function getDefaultImage(): string {
+  return isDev ? DEV_IMAGE : `${GHCR_IMAGE}:${pkgVersion}`
+}
 
 // ─── Paths ───
 

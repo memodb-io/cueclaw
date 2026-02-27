@@ -29,6 +29,6 @@ logging:
 
 # container:
 #   enabled: false
-#   image: cueclaw-agent:latest
+#   image: ghcr.io/memodb-io/cueclaw-agent:latest
 #   timeout: 1800000
 #   network: none
