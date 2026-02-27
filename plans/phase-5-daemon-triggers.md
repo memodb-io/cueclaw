@@ -35,56 +35,51 @@ Phase 5 adds the "always-on" layer — the daemon loop, trigger evaluation, and 
 
 The daemon is the same Node.js process, started with `cueclaw daemon start` or by the OS service manager. The `startDaemon()` function is defined in `src/daemon.ts` and re-exported from `src/index.ts`.
 
-- [x] `cueclaw daemon start [--detach]` — start the daemon process (foreground, or `--detach` for background)
-- [x] `cueclaw daemon stop` — gracefully stop the daemon
+- [x] `cueclaw daemon start` — start daemon in background (detached, PID file via `spawnDaemonProcess()`)
+- [x] `cueclaw daemon start --foreground` — start daemon in foreground (used by launchd/systemd service files)
+- [x] `cueclaw daemon stop` — gracefully stop the daemon (via PID file first, falls back to system service)
 - [x] `cueclaw daemon restart` — stop + start
 - [x] `cueclaw daemon install` — register OS system service (launchd/systemd)
-- [ ] `cueclaw daemon uninstall` — remove OS system service
-- [ ] `cueclaw daemon status` — check if daemon is running
-- [ ] `cueclaw daemon logs` — tail the daemon log file
-- [ ] On startup: initialize DB, load config, start all enabled Channels, start trigger loop
-- [ ] On shutdown: graceful — stop accepting new triggers, wait for running steps to complete, disconnect Channels
+- [x] `cueclaw daemon status` — check if daemon is running (PID file first, then system service)
+- [x] `cueclaw daemon uninstall` — remove OS system service
+- [x] `cueclaw daemon logs` — tail the daemon log file
+- [x] On startup: initialize DB, load config, start all enabled Channels, start trigger loop, write PID file
+- [x] On shutdown: graceful — stop accepting new triggers, wait for running steps to complete, disconnect Channels, remove PID file
+
+**PID file management** (`src/daemon.ts`):
 
 ```typescript
-// src/daemon.ts — daemon main loop
-export async function startDaemon(config: CueclawConfig) {
-  const db = initDb()
-  const router = new MessageRouter()
+// PID file at ~/.cueclaw/daemon.pid
+export function daemonPidPath(): string       // Returns PID file path
+export function writePidFile(pid: number)     // Write PID on startup
+export function removePidFile()               // Remove on shutdown
+export function readPidFile(): number | null  // Read PID, null if missing
+export function isProcessAlive(pid: number)   // process.kill(pid, 0) probe
+export function isDaemonRunning(): boolean    // PID file + process probe
 
-  // Start enabled channels
-  if (config.whatsapp?.enabled) {
-    const wa = new WhatsAppChannel(config.whatsapp, (jid, msg) =>
-      router.handleInbound('whatsapp', jid, msg)
-    )
-    await wa.connect()
-    router.registerChannel(wa)
-  }
-  // ... telegram, tui channels
-
-  // Crash recovery — must run BEFORE trigger loop to clean up stale state
-  await recoverRunningWorkflows(db, router)
-
-  // Start trigger loop (queries for phase='active' workflows)
-  const triggerLoop = new TriggerLoop(db, router, config)
-  await triggerLoop.start()
-
-  // Graceful shutdown
-  process.on('SIGTERM', () => triggerLoop.stop())
-  process.on('SIGINT', () => triggerLoop.stop())
-}
+export function spawnDaemonProcess(): number | null
+// Spawns detached child process with:
+// - process.execArgv forwarding (preserves tsx/loader flags in dev mode)
+// - stdio redirected to ~/.cueclaw/logs/daemon.log
+// - PID file written on spawn
+// - Returns child PID, or null on failure
 ```
+
+`startDaemon()` writes PID file on start, removes it on graceful shutdown (SIGTERM/SIGINT).
+
+**CLI change:** `bot start` subcommand removed from CLI — now only available as TUI `/bot start` slash command.
 
 ### 5.2 System Service Integration (`src/service.ts`)
 
-No custom PID file management — delegate to OS-level service managers.
+PID file management in `daemon.ts` for background process tracking. OS service managers (launchd/systemd) additionally manage the daemon when installed.
 
 **macOS (launchd):**
 
-- [ ] `cueclaw daemon install` generates `~/Library/LaunchAgents/com.cueclaw.plist` and runs `launchctl load`
-- [ ] `cueclaw daemon uninstall` runs `launchctl unload` and deletes the plist
+- [x] `cueclaw daemon install` generates `~/Library/LaunchAgents/com.cueclaw.plist` and runs `launchctl load`
+- [x] `cueclaw daemon uninstall` runs `launchctl unload` and deletes the plist
 - [x] `cueclaw daemon restart` — stop + start (use `launchctl kickstart -k` manually if needed)
-- [ ] `KeepAlive: true` for automatic crash restart
-- [ ] Stdout/stderr redirect to `~/.cueclaw/logs/daemon.log`
+- [x] `KeepAlive: true` for automatic crash restart
+- [x] Stdout/stderr redirect to `~/.cueclaw/logs/daemon.log`
 
 ```xml
 <!-- launchd/com.cueclaw.plist -->
@@ -100,6 +95,7 @@ No custom PID file management — delegate to OS-level service managers.
     <string>/path/to/cueclaw/dist/cli.js</string>
     <string>daemon</string>
     <string>start</string>
+    <string>--foreground</string>
   </array>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>/Users/username/.cueclaw/logs/daemon.log</string>
@@ -110,20 +106,20 @@ No custom PID file management — delegate to OS-level service managers.
 
 **Linux (systemd):**
 
-- [ ] `cueclaw daemon install` generates `~/.config/systemd/user/cueclaw.service`, runs `systemctl --user enable --now cueclaw`
-- [ ] `cueclaw daemon uninstall` runs `systemctl --user disable --now cueclaw` and deletes the service file
-- [ ] `Restart=always` for automatic crash restart
-- [ ] Logs accessible via `journalctl --user -u cueclaw`
+- [x] `cueclaw daemon install` generates `~/.config/systemd/user/cueclaw.service`, runs `systemctl --user enable --now cueclaw`
+- [x] `cueclaw daemon uninstall` runs `systemctl --user disable --now cueclaw` and deletes the service file
+- [x] `Restart=always` for automatic crash restart
+- [x] Logs accessible via `journalctl --user -u cueclaw`
 
 ### 5.3 Trigger System (`src/trigger.ts`)
 
 Triggers are generic — they don't know about specific services. The Planner generates the trigger logic (e.g., `gh api` scripts).
 
-- [ ] `TriggerConfig` type handling for MVP trigger types: `poll`, `cron`, `manual`
-- [ ] `evaluateTrigger(workflow, db)` — check if a trigger should fire
-- [ ] Poll trigger: execute `check_script`, compare output to last stored result
-- [ ] Cron trigger: evaluate cron expression against current time
-- [ ] Manual trigger: immediate execution on user request
+- [x] `TriggerConfig` type handling for MVP trigger types: `poll`, `cron`, `manual`
+- [x] `evaluateTrigger(workflow, db)` — check if a trigger should fire
+- [x] Poll trigger: execute `check_script`, compare output to last stored result
+- [x] Cron trigger: evaluate cron expression against current time
+- [x] Manual trigger: immediate execution on user request
 
 **Poll trigger execution flow:**
 
@@ -168,12 +164,12 @@ async function evaluatePollTrigger(
 
 The main polling loop that evaluates all active triggers on schedule.
 
-- [ ] On start: load all workflows with `phase === 'active'` from SQLite
-- [ ] Maintain a timer map: each workflow's trigger gets its own interval
-- [ ] Poll triggers: execute every `interval_seconds`
-- [ ] Cron triggers: evaluate every minute, fire when expression matches
-- [ ] When a workflow is created/paused/deleted: dynamically add/remove from the loop
-- [ ] Error handling: if a trigger check fails, log error, continue to next cycle (don't crash the loop)
+- [x] On start: load all workflows with `phase === 'active'` from SQLite
+- [x] Maintain a timer map: each workflow's trigger gets its own interval
+- [x] Poll triggers: execute every `interval_seconds`
+- [x] Cron triggers: evaluate every minute, fire when expression matches
+- [x] When a workflow is created/paused/deleted: dynamically add/remove from the loop
+- [x] Error handling: if a trigger check fails, log error, continue to next cycle (don't crash the loop)
 
 ```typescript
 export class TriggerLoop {
@@ -249,9 +245,9 @@ export class TriggerLoop {
 
 Prevents resource exhaustion from too many concurrent agent executions. MVP uses a simple FIFO + concurrency cap — no round-robin.
 
-- [ ] Global concurrency cap: `MAX_CONCURRENT_AGENTS = 5` (configurable)
-- [ ] Per-workflow queue: same workflow's multiple trigger fires queue up sequentially (FIFO)
-- [ ] Graceful shutdown: don't kill running agents, let them finish naturally
+- [x] Global concurrency cap: `MAX_CONCURRENT_AGENTS = 5` (configurable)
+- [x] Per-workflow queue: same workflow's multiple trigger fires queue up sequentially (FIFO)
+- [x] Graceful shutdown: don't kill running agents, let them finish naturally
 
 ```typescript
 export class GroupQueue {
@@ -301,10 +297,10 @@ export class GroupQueue {
 
 ### 5.6 Crash Recovery
 
-- [ ] On daemon restart: query SQLite for workflows with `phase = 'executing'` and runs with `status = 'running'`
-- [ ] For interrupted runs: mark as `failed` with error "Daemon restarted during execution"
-- [ ] Re-register all active triggers in the TriggerLoop
-- [ ] Notify users about interrupted runs via their Channels
+- [x] On daemon restart: query SQLite for workflows with `phase = 'executing'` and runs with `status = 'running'`
+- [x] For interrupted runs: mark as `failed` with error "Daemon restarted during execution"
+- [x] Re-register all active triggers in the TriggerLoop
+- [x] Notify users about interrupted runs via their Channels
 
 ```typescript
 async function recoverRunningWorkflows(db: Database, router: MessageRouter) {
@@ -335,10 +331,10 @@ async function recoverRunningWorkflows(db: Database, router: MessageRouter) {
 
 ### 5.8 Workflow State Persistence
 
-- [ ] All state transitions write to SQLite immediately (not batched)
-- [ ] Step outputs saved to `step_runs.output_json` after each step completes
-- [ ] Workflow phase transitions logged with timestamps
-- [ ] Session IDs stored for potential resume after crash (best-effort, not guaranteed)
+- [x] All state transitions write to SQLite immediately (not batched)
+- [x] Step outputs saved to `step_runs.output_json` after each step completes
+- [x] Workflow phase transitions logged with timestamps
+- [x] Session IDs stored for potential resume after crash (best-effort, not guaranteed)
 
 ---
 
@@ -372,18 +368,18 @@ const decision = await onStepFailure(step, error)
 
 ## Acceptance Criteria
 
-- [ ] `cueclaw daemon install` creates launchd plist (macOS) or systemd service (Linux)
-- [ ] Daemon starts automatically on system boot and restarts after crash
-- [ ] `cueclaw daemon status` correctly reports running/stopped state
-- [ ] `cueclaw daemon logs` shows formatted log output
-- [ ] Poll trigger correctly executes `check_script` and detects new items
-- [ ] Cron trigger fires at the configured schedule
-- [ ] GroupQueue limits concurrent agent executions to the configured cap
-- [ ] Per-workflow queueing prevents concurrent runs of the same workflow
-- [ ] Crash recovery marks interrupted runs as failed and notifies users
-- [ ] All active triggers re-register after daemon restart
-- [ ] ~~Execution logs are written to per-run log files~~ — NOT IMPLEMENTED (all logging goes to daemon.log)
-- [ ] Graceful shutdown waits for running agents to complete
+- [x] `cueclaw daemon install` creates launchd plist (macOS) or systemd service (Linux)
+- [x] Daemon starts automatically on system boot and restarts after crash
+- [x] `cueclaw daemon status` correctly reports running/stopped state
+- [x] `cueclaw daemon logs` shows formatted log output
+- [x] Poll trigger correctly executes `check_script` and detects new items
+- [x] Cron trigger fires at the configured schedule
+- [x] GroupQueue limits concurrent agent executions to the configured cap
+- [x] Per-workflow queueing prevents concurrent runs of the same workflow
+- [x] Crash recovery marks interrupted runs as failed and notifies users
+- [x] All active triggers re-register after daemon restart
+- [x] ~~Execution logs are written to per-run log files~~ — NOT IMPLEMENTED (all logging goes to daemon.log)
+- [x] Graceful shutdown waits for running agents to complete
 
 ---
 

@@ -171,11 +171,13 @@ pnpm test:watch                    # Watch mode for development
 
 ## Test Files
 
-23 test files covering ~188 tests:
+33 test files covering ~309 tests:
 
 ```
 src/
 ├── config.test.ts               # Config loading, YAML parsing
+├── container-runner.test.ts     # Container spawn
+├── container-runtime.test.ts    # Docker image management (ensureDockerImage, auto-build/pull)
 ├── db.test.ts                   # SQLite CRUD, migrations
 ├── env.test.ts                  # .env parsing, writeEnvVar, credential detection
 ├── executor.test.ts             # DAG scheduling, parallel execution, failure policy
@@ -183,21 +185,31 @@ src/
 ├── hooks.test.ts                # PreToolUse, PreCompact hooks
 ├── integration.test.ts          # End-to-end workflow flows
 ├── ipc.test.ts                  # Host ↔ container IPC
+├── logger.test.ts               # pino logger setup
 ├── mcp-server.test.ts           # MCP server tools
 ├── mount-security.test.ts       # Mount allowlist validation
-├── planner.test.ts              # Planner output parsing, DAG validation
+├── planner.test.ts              # Planner output parsing, DAG validation, channel-aware prompt
 ├── planner-session.test.ts      # Multi-turn conversation, tool responses
-├── router.test.ts               # Message routing
+├── router.test.ts               # Message routing, ChannelContext propagation
 ├── session.test.ts              # Session resume, compaction
 ├── setup-environment.test.ts    # Environment detection
 ├── trigger.test.ts              # Trigger evaluation
 ├── types.test.ts                # Type validation
 ├── workflow.test.ts             # Workflow state machine
-├── container-runner.test.ts     # Container spawn
 ├── channels/
 │   └── telegram.test.ts         # Telegram channel
 └── tui/
+    ├── app-provider.test.tsx    # AppProvider state management
     ├── chat.test.tsx            # Chat component rendering, command hints
+    ├── color-utils.test.ts      # Hex/RGB conversion, color interpolation
     ├── commands.test.ts         # Slash command parsing and execution
-    └── renderers.test.tsx       # WorkflowTable, WorkflowDetail components
+    ├── commands/
+    │   └── registry.test.ts     # Command registry
+    ├── dialog-manager.test.tsx  # Dialog priority queue, dismissal
+    ├── key-bindings.test.ts     # Key binding definitions, matching
+    ├── renderers.test.tsx       # WorkflowTable, WorkflowDetail components
+    ├── theme/
+    │   └── theme-manager.test.ts # Theme switching, semantic colors
+    ├── use-input-history.test.ts # Shell-like history navigation
+    └── use-keypress.test.tsx    # Priority-based keyboard dispatch
 ```

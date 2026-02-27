@@ -53,11 +53,11 @@ All Bots run as Channel instances within the single CueClaw daemon process — n
 
 ### 4.1 Message Router (`src/router.ts`)
 
-- [ ] Central router that receives `OnInboundMessage` from any Channel
-- [ ] Routes to appropriate handler: new workflow creation, plan confirmation, workflow management
-- [ ] Formats outbound messages for the originating Channel
-- [ ] Handles concurrent messages from different channels for the same workflow
-- [ ] Message queue per chat to avoid interleaving responses
+- [x] Central router that receives `OnInboundMessage` from any Channel
+- [x] Routes to appropriate handler: new workflow creation, plan confirmation, workflow management
+- [x] Formats outbound messages for the originating Channel
+- [x] Handles concurrent messages from different channels for the same workflow
+- [x] Message queue per chat to avoid interleaving responses
 
 ```typescript
 const CONFIRMATION_TIMEOUT = 10 * 60_000  // 10 minutes default
@@ -120,16 +120,16 @@ export class MessageRouter {
 
 ### 4.2 WhatsApp Channel (`src/channels/whatsapp.ts`)
 
-- [ ] Initialize Baileys (`@whiskeysockets/baileys`) in polling mode
-- [ ] QR code authentication flow — display QR in terminal during setup
-- [ ] Persist auth state to `~/.cueclaw/auth/whatsapp/` (survives restarts)
-- [ ] Implement `Channel` interface: `connect()`, `sendMessage()`, `disconnect()`, etc.
-- [ ] `OnInboundMessage` callback on new message events
-- [ ] Handle both private chats and groups
-- [ ] ~~Outbound message queue with rate limiting~~ — NOT IMPLEMENTED (rate limiting handled at MessageRouter level, not per-channel)
-- [ ] Group metadata sync with 24h cache
-- [ ] `setTyping()` — show typing indicator while agent executes
-- [ ] Reconnection logic with exponential backoff
+- [x] Initialize Baileys (`@whiskeysockets/baileys`) in polling mode
+- [x] QR code authentication flow — display QR in terminal during setup
+- [x] Persist auth state to `~/.cueclaw/auth/whatsapp/` (survives restarts)
+- [x] Implement `Channel` interface: `connect()`, `sendMessage()`, `disconnect()`, etc.
+- [x] `OnInboundMessage` callback on new message events
+- [x] Handle both private chats and groups
+- [x] ~~Outbound message queue with rate limiting~~ — NOT IMPLEMENTED (rate limiting handled at MessageRouter level, not per-channel)
+- [ ] Group metadata sync with 24h cache — NOT IMPLEMENTED
+- [x] `setTyping()` — show typing indicator while agent executes
+- [ ] Reconnection logic with exponential backoff — NOT IMPLEMENTED
 
 ```typescript
 import makeWASocket, { useMultiFileAuthState } from '@whiskeysockets/baileys'
@@ -156,8 +156,13 @@ export class WhatsAppChannel implements Channel {
     })
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
-    await this.sock!.sendMessage(jid, { text })
+  async sendMessage(jid: string, text: string): Promise<string> {
+    const sent = await this.sock!.sendMessage(jid, { text })
+    return sent?.key?.id ?? ''
+  }
+
+  async editMessage(jid: string, messageId: string, text: string): Promise<void> {
+    await this.sock!.sendMessage(jid, { text, edit: { remoteJid: jid, id: messageId, fromMe: true } })
   }
 
   // ... other Channel interface methods
@@ -166,16 +171,16 @@ export class WhatsAppChannel implements Channel {
 
 ### 4.3 Telegram Channel (`src/channels/telegram.ts`)
 
-- [ ] Initialize grammy bot with token from config
+- [x] Initialize grammy bot with token from config
 - [x] Polling mode only (`bot.start()` long polling) — webhook mode not implemented
-- [ ] Implement `Channel` interface
-- [ ] `OnInboundMessage` callback on new message events
-- [ ] **Inline Keyboard** for plan confirmation — buttons: Confirm, Modify, Cancel
-- [ ] Handle callback queries from inline keyboards
-- [ ] Message chunking for long messages (4096 character limit per message)
-- [ ] `setTyping()` via `sendChatAction('typing')`
-- [ ] User allowlist from config (`telegram.allowed_users`)
-- [ ] Command registration: `/new`, `/list`, `/status`, `/cancel`
+- [x] Implement `Channel` interface
+- [x] `OnInboundMessage` callback on new message events
+- [x] **Inline Keyboard** for plan confirmation — buttons: Confirm, Modify, Cancel
+- [x] Handle callback queries from inline keyboards
+- [x] Message chunking for long messages (4096 character limit per message)
+- [x] `setTyping()` via `sendChatAction('typing')`
+- [x] User allowlist from config (`telegram.allowed_users`)
+- [x] Command registration: `/new`, `/list`, `/status`, `/cancel`
 
 ```typescript
 import { Bot, InlineKeyboard } from 'grammy'
@@ -239,10 +244,10 @@ For WhatsApp (no slash command support), prefix with `!` instead: `!new`, `!list
 
 ### 4.5 Plan Confirmation via Bot
 
-- [ ] Format plan as a structured message (Markdown for Telegram, plain text for WhatsApp)
-- [ ] Telegram: inline keyboard buttons for confirm/modify/cancel
-- [ ] WhatsApp: react-based confirmation (reply with "yes"/"no"/"modify") or numbered options
-- [ ] Modify flow: bot asks for modification description → sends to Planner → re-sends updated plan
+- [x] Format plan as a structured message (Markdown for Telegram, plain text for WhatsApp)
+- [x] Telegram: inline keyboard buttons for confirm/modify/cancel
+- [x] WhatsApp: react-based confirmation (reply with "yes"/"no"/"modify") or numbered options
+- [x] Modify flow: bot asks for modification description → sends to Planner → re-sends updated plan
 - [x] Timeout: 10-minute confirmation timeout in MessageRouter (expired confirmations are cleared)
 
 ```
@@ -261,17 +266,29 @@ Bot:  📋 Workflow: GitHub Issue Auto PR
 
 ### 4.6 Progress Notifications
 
-- [ ] When a workflow step starts: send brief status update
-- [ ] When a workflow completes: send summary with results
-- [ ] When a workflow fails: send error details with retry/cancel options
-- [ ] Typing indicator active while agent is executing
-- [ ] Batch rapid updates (don't send individual messages for every agent event)
+- [x] When a workflow step starts: send brief status update
+- [x] When a workflow completes: send summary with results
+- [x] When a workflow fails: send error details with retry/cancel options
+- [x] Typing indicator active while agent is executing
+- [x] Batch rapid updates (don't send individual messages for every agent event)
 
-### 4.7 Bot Lifecycle CLI Commands
+### 4.7 Bot Lifecycle Commands
 
-- [x] `cueclaw bot start` — start all enabled Bot Channels
-- [x] `cueclaw bot status` — show connection status of each Channel
-- [ ] ~~`cueclaw bot config`~~ — NOT IMPLEMENTED (setup handled via `cueclaw setup` and config.yaml editing)
+- [x] `/bot start` — start all enabled Bot Channels (TUI slash command only, removed from CLI)
+- [x] `/bot status` — show connection status of each Channel (TUI slash command only)
+- [x] ~~`cueclaw bot start` CLI subcommand~~ — REMOVED (now TUI-only `/bot start` command)
+- [x] ~~`cueclaw bot config`~~ — NOT IMPLEMENTED (setup handled via `cueclaw setup` and config.yaml editing)
+
+### 4.8 ChannelContext Propagation
+
+- [x] `ChannelContext` type added to `types.ts` — identifies channel, chatJid, sender
+- [x] Router passes `ChannelContext` through to `generatePlan`, `modifyPlan`, and `PlannerSession`
+- [x] Planner system prompt adapts based on channel context:
+  - Bot channels: "you have the chat ID, use it for notifications"
+  - TUI: "require explicit recipient input"
+- [x] `sendMessage` now returns message ID (string) for edit support
+- [x] `editMessage` added to Channel interface (optional) — enables in-place status updates
+- [x] Router uses `editMessage` for "Generating plan..." → "✅ Plan generated" status flow
 
 ---
 
@@ -310,14 +327,14 @@ Bot:  ✅ Workflow complete!
       https://github.com/acontext/repo/pull/43
 ```
 
-### 4.8 Rate Limiting
+### 4.9 Rate Limiting
 
 Bot channels are publicly reachable — a bad actor who knows the bot's phone number or Telegram username can spam messages and run up API costs.
 
-- [ ] Per-user rate limit in `MessageRouter.handleInbound()`: max N messages per minute (default: 10, configurable)
-- [ ] Implemented as a sliding window counter per `chatJid`
-- [ ] Excess messages receive a short reply: "Rate limited, please wait before sending more messages."
-- [ ] Rate limit state is in-memory (no persistence needed — resets on daemon restart)
+- [x] Per-user rate limit in `MessageRouter.handleInbound()`: max N messages per minute (default: 10, configurable)
+- [x] Implemented as a sliding window counter per `chatJid`
+- [x] Excess messages receive a short reply: "Rate limited, please wait before sending more messages."
+- [x] Rate limit state is in-memory (no persistence needed — resets on daemon restart)
 
 ```typescript
 const RATE_LIMIT_WINDOW = 60_000  // 1 minute
@@ -353,19 +370,19 @@ function isRateLimited(chatJid: string): boolean {
 
 ## Acceptance Criteria
 
-- [ ] WhatsApp Channel connects via QR scan and persists auth state
-- [ ] Telegram Channel connects with bot token and responds to messages
-- [ ] Both channels correctly implement the full `Channel` interface
-- [ ] Sending a workflow description via Bot triggers Planner and returns a plan
-- [ ] Plan confirmation via inline keyboard (Telegram) or text reply (WhatsApp) works
-- [ ] Plan modification flow works end-to-end via Bot
-- [ ] Execution progress notifications are sent during workflow runs
-- [ ] `/list` and `/status` commands return correct workflow information
-- [ ] User allowlist restricts access on Telegram
-- [ ] Long messages are properly chunked (Telegram 4096 char limit)
-- [ ] Typing indicator shows during agent execution
-- [ ] Reconnection works after network interruption
-- [ ] Per-user rate limiting prevents message spam (default: 10/min)
+- [x] WhatsApp Channel connects via QR scan and persists auth state
+- [x] Telegram Channel connects with bot token and responds to messages
+- [x] Both channels correctly implement the full `Channel` interface
+- [x] Sending a workflow description via Bot triggers Planner and returns a plan
+- [x] Plan confirmation via inline keyboard (Telegram) or text reply (WhatsApp) works
+- [x] Plan modification flow works end-to-end via Bot
+- [x] Execution progress notifications are sent during workflow runs
+- [x] `/list` and `/status` commands return correct workflow information
+- [x] User allowlist restricts access on Telegram
+- [x] Long messages are properly chunked (Telegram 4096 char limit)
+- [x] Typing indicator shows during agent execution
+- [ ] Reconnection works after network interruption — NOT TESTED
+- [x] Per-user rate limiting prevents message spam (default: 10/min)
 
 ---
 

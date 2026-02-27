@@ -36,9 +36,10 @@ logging:
   dir: ~/.cueclaw/logs           # File logging: daemon.log + executions/{workflowId}_{date}.log
 
 container:
-  enabled: true                    # Default: true. Set false = local execution with PreToolUse hooks only
-                                   # If Docker is unavailable at runtime, falls back to local execution with a warning
-  image: cueclaw-agent:latest
+  enabled: false                   # Default: false. Set true = container execution with Docker isolation
+                                   # Auto-pulls from GHCR if image not found locally; falls back to local if pull fails
+  image: ghcr.io/memodb-io/cueclaw-agent:0.1.2  # Default: version-pinned to CLI version via getDefaultImage()
+                                   # Dev mode defaults to 'cueclaw-agent:latest' (local build)
   timeout: 1800000                 # 30 min hard timeout per step
   max_output_size: 10485760        # 10MB output cap
   idle_timeout: 1800000            # 30 min idle timeout
@@ -86,19 +87,16 @@ cueclaw pause <workflow-id>     # Pause workflow
 cueclaw resume <workflow-id>    # Resume workflow
 cueclaw delete <workflow-id>    # Delete workflow
 
-cueclaw daemon start             # Start daemon (foreground)
-cueclaw daemon start --detach    # Start daemon in background
-cueclaw daemon stop              # Gracefully stop daemon
+cueclaw daemon start             # Start daemon in background (detached, PID file)
+cueclaw daemon start --foreground # Start daemon in foreground (used by launchd/systemd)
+cueclaw daemon stop              # Gracefully stop daemon (via PID file or system service)
 cueclaw daemon restart           # Stop + start daemon
 cueclaw daemon install           # Register OS system service (launchd/systemd)
 cueclaw daemon uninstall         # Remove OS system service
-cueclaw daemon status            # View service status
+cueclaw daemon status            # View service status (checks PID file first, then system service)
 cueclaw daemon logs              # View logs (tail -f)
 
 cueclaw info                    # Show current config, SDK version, etc.
-
-cueclaw bot start               # Start all configured Bot Channels
-cueclaw bot status              # View Channel connection status (config-level)
 
 cueclaw tui                     # Start interactive TUI (default command)
 cueclaw                         # Equivalent to cueclaw tui
@@ -129,6 +127,8 @@ When inside the TUI chat, the following slash commands are available:
 /new <description>     Generate a plan directly (skip multi-turn conversation)
 /cancel                Cancel current planner conversation
 /setup                 Re-run configuration setup wizard
+/theme [name]          Switch theme (dark|light|dracula)
+/quit (/q, /exit)      Quit CueClaw
 ```
 
 Commands support prefix matching for workflow IDs (e.g., `/status wf_abc` matches `wf_abcdef123`).

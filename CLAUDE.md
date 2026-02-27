@@ -4,17 +4,19 @@ Orchestrate agent workflows with natural language. Uses the Claude Agent SDK to 
 
 ## Project Status
 
-MVP implemented (Phases 0-6) with multi-turn planner, TUI slash commands, and daemon bridge. ~188 tests across 23 test files.
+MVP implemented (Phases 0-6) with multi-turn planner, decomposed TUI (context/hook architecture), daemon bridge with PID file management, and channel-aware planner. ~309 tests across 33 test files.
 
 ## Key Concepts
 
 - **Workflow**: Natural language → Planner (LLM) → PlannerOutput → framework fills id/phase/timestamps → Workflow JSON (DAG of steps)
 - **Planner Session**: Multi-turn conversation with the planner — clarify requirements, store credentials, then generate workflow
 - **Executor**: Parallel DAG execution — independent steps run concurrently via `Promise.all`
-- **Channel**: Unified interface for TUI, WhatsApp, Telegram — all share identical capabilities
-- **Daemon Bridge**: Abstraction between TUI and backend — detects external system service or runs in-process
+- **Channel**: Unified interface for TUI, WhatsApp, Telegram — `sendMessage` returns message ID, optional `editMessage` for in-place status updates
+- **ChannelContext**: Identifies channel + sender, threaded through planner for channel-aware system prompt (bot vs TUI)
+- **Daemon Bridge**: Abstraction between TUI and backend — detects external daemon via PID file (`~/.cueclaw/daemon.pid`) or system service
+- **TUI Architecture**: Decomposed into providers (ThemeProvider → KeypressProvider → DialogManager → AppProvider → AppLayout), context layer (UIStateContext + UIActionsContext), custom hooks (6 in `tui/hooks/`), command registry (`tui/commands/`), theme system (`tui/theme/` with 3 built-in themes), per-type message components (`tui/messages/`)
 - **Input References**: `$steps.{id}.output` (step results) and `$trigger_data` (trigger payload), resolved at execution time
-- **Container Execution**: Enabled by default — falls back to local execution with a warning if Docker is unavailable
+- **Container Execution**: Opt-in via `container.enabled: true` in config.yaml — dev mode uses `cueclaw-agent:latest` (local build via `container/build.sh`), production uses version-pinned `ghcr.io/memodb-io/cueclaw-agent:{version}` with auto-pull from GHCR; falls back to local execution if Docker is unavailable or pull fails
 - **Session**: Per-step (not per-run) — steps don't share session context to avoid pollution
 - **File Logging**: `initLogger()` writes to `~/.cueclaw/logs/daemon.log` (all processes) and `executions/` subdir (per-workflow); composes with TUI in-memory stream via pino multistream
 
@@ -27,8 +29,9 @@ User (TUI / WhatsApp / Telegram)
   → Executor → Agent Runner (Claude Agent SDK query())
   → Results persisted to SQLite
 
-TUI: Onboarding → Chat (slash commands) → Plan View → Execution View
-     DaemonBridge (external service or in-process TriggerLoop + bot channels)
+TUI: App → ThemeProvider → KeypressProvider → DialogManager → AppProvider → AppLayout
+     Views: Onboarding | Chat (MainContent + Composer) | Plan | Execution | Status | Detail
+     DaemonBridge (PID file or system service detection, in-process fallback)
 ```
 
 ## Tech Stack
@@ -62,7 +65,7 @@ Never write code that contradicts existing documentation. If the design needs to
 
 ## Conventions
 
-- Flat `src/` layout — no deep nesting, only `channels/` and `tui/` subdirectories
+- Flat `src/` layout — no deep nesting, only `channels/` and `tui/` subdirectories (TUI has sub-dirs: `commands/`, `hooks/`, `messages/`, `theme/`)
 - Co-located tests: `foo.ts` + `foo.test.ts`
 - Error types: `CueclawError` base → `PlannerError`, `ExecutorError`, `TriggerError`, `ConfigError`
 - DB tests use `Database(':memory:')`, never touch the filesystem

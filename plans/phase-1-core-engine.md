@@ -38,16 +38,16 @@ The multi-turn session is the primary flow used by `MessageRouter` and TUI. Sing
 
 **Implementation details:**
 
-- [ ] Define `create_workflow` tool with **`PlannerOutput`** JSON Schema as `input_schema` (excludes framework fields: id, phase, timestamps)
-- [ ] Define `ask_question` tool for multi-turn clarification
-- [ ] Define `set_secret` tool for credential storage (auto-continues via recursive `runPlannerTurn()`)
-- [ ] Single-turn: Call Claude API with `tool_choice: { type: 'tool', name: 'create_workflow' }` to force structured output
-- [ ] Multi-turn: Call Claude API with `tool_choice: 'auto'`, allowing the LLM to choose between the three tools
-- [ ] System prompt: describe the execution environment, rules for step IDs, DAG constraints, `$steps` / `$trigger_data` reference syntax
-- [ ] Include user identity and available credentials from config in system prompt
-- [ ] Validation pipeline: Zod parse → DAG validation (no cycles, valid `depends_on` refs) → `$steps` / `$trigger_data` reference check
-- [ ] Retry loop: up to 2 retries with error feedback injected into the prompt for self-correction
-- [ ] After validation passes, framework fills in `id`, `phase`, `schema_version`, `created_at`, `updated_at` to produce the complete `Workflow`
+- [x] Define `create_workflow` tool with **`PlannerOutput`** JSON Schema as `input_schema` (excludes framework fields: id, phase, timestamps)
+- [x] Define `ask_question` tool for multi-turn clarification
+- [x] Define `set_secret` tool for credential storage (auto-continues via recursive `runPlannerTurn()`)
+- [x] Single-turn: Call Claude API with `tool_choice: { type: 'tool', name: 'create_workflow' }` to force structured output
+- [x] Multi-turn: Call Claude API with `tool_choice: 'auto'`, allowing the LLM to choose between the three tools
+- [x] System prompt: describe the execution environment, rules for step IDs, DAG constraints, `$steps` / `$trigger_data` reference syntax
+- [x] Include user identity and available credentials from config in system prompt
+- [x] Validation pipeline: Zod parse → DAG validation (no cycles, valid `depends_on` refs) → `$steps` / `$trigger_data` reference check
+- [x] Retry loop: up to 2 retries with error feedback injected into the prompt for self-correction
+- [x] After validation passes, framework fills in `id`, `phase`, `schema_version`, `created_at`, `updated_at` to produce the complete `Workflow`
 
 ```typescript
 // src/planner.ts — key structure
@@ -147,17 +147,17 @@ ${userIdentity}
 ```
 
 **Plan modification flow:**
-- [ ] `modifyPlan(originalWorkflow, modificationDescription)` — strips framework fields (`id`, `phase`, `schema_version`, `created_at`, `updated_at`) from the workflow before including in the prompt, sending only `PlannerOutput` fields. `PlannerOutputSchema` uses Zod `.strip()` (default behavior) to reject any extra fields
-- [ ] System prompt emphasizes "preserve unmodified steps' IDs, descriptions, and dependencies — only change what the user specified"
-- [ ] Regenerates the full plan (not a patch), but uses prompt engineering to ensure stability
+- [x] `modifyPlan(originalWorkflow, modificationDescription)` — strips framework fields (`id`, `phase`, `schema_version`, `created_at`, `updated_at`) from the workflow before including in the prompt, sending only `PlannerOutput` fields. `PlannerOutputSchema` uses Zod `.strip()` (default behavior) to reject any extra fields
+- [x] System prompt emphasizes "preserve unmodified steps' IDs, descriptions, and dependencies — only change what the user specified"
+- [x] Regenerates the full plan (not a patch), but uses prompt engineering to ensure stability
 
 ### 1.2 DAG Validation (`src/planner.ts` or `src/workflow.ts`)
 
-- [ ] Topological sort to detect cycles
-- [ ] Verify all `depends_on` references point to existing step IDs
-- [ ] Verify all `$steps.{id}.output` references in `inputs` have the referenced step in `depends_on`
-- [ ] Verify `$trigger_data` references: allowed for all trigger types (resolves to `null` for manual triggers without runtime data)
-- [ ] Return clear error messages for each violation
+- [x] Topological sort to detect cycles
+- [x] Verify all `depends_on` references point to existing step IDs
+- [x] Verify all `$steps.{id}.output` references in `inputs` have the referenced step in `depends_on`
+- [x] Verify `$trigger_data` references: allowed for all trigger types (resolves to `null` for manual triggers without runtime data)
+- [x] Return clear error messages for each violation
 
 ```typescript
 export function validateDAG(steps: PlanStep[]): string[] {
@@ -192,12 +192,12 @@ For now this is called programmatically. Phase 3 (TUI) and Phase 4 (Bot) add the
 
 The Executor takes a confirmed workflow and runs its steps respecting the DAG order, **parallelizing independent steps**.
 
-- [ ] "Ready queue" model: maintain a ready set — steps enter the queue when all `depends_on` have succeeded
-- [ ] Independent steps (no dependency relationship) run in parallel via `Promise.all`
-- [ ] Resolve `$steps.{id}.output` and `$trigger_data` references in `inputs` before passing to agent
-- [ ] Track step status transitions: `pending` → `running` → `succeeded`/`failed`
-- [ ] Persist step results to `step_runs` table
-- [ ] Create a `workflow_runs` record when execution begins
+- [x] "Ready queue" model: maintain a ready set — steps enter the queue when all `depends_on` have succeeded
+- [x] Independent steps (no dependency relationship) run in parallel via `Promise.all`
+- [x] Resolve `$steps.{id}.output` and `$trigger_data` references in `inputs` before passing to agent
+- [x] Track step status transitions: `pending` → `running` → `succeeded`/`failed`
+- [x] Persist step results to `step_runs` table
+- [x] Create a `workflow_runs` record when execution begins
 
 **Step run result type:**
 
@@ -397,15 +397,15 @@ async function executeStep(step, resolvedInputs, runId, db) {
 
 Wraps the Claude Agent SDK `query()` call. In Phase 0–4, agents run locally (no Docker). Docker isolation is a future enhancement.
 
-- [ ] Call `query()` with the step's prompt + resolved inputs
-- [ ] Configure `allowedTools` based on config
-- [ ] Set up `settingSources: ['project']` for skills loading
-- [ ] Verify `model` option support in Claude Agent SDK before implementation; if not supported, use environment variable or SDK config
-- [ ] Stream messages for progress tracking
-- [ ] Extract `session_id` from init message and `result` from result message (via `"result" in message` check)
+- [x] Call `query()` with the step's prompt + resolved inputs
+- [x] Configure `allowedTools` based on config
+- [x] Set up `settingSources: ['project']` for skills loading
+- [x] Verify `model` option support in Claude Agent SDK before implementation; if not supported, use environment variable or SDK config
+- [x] Stream messages for progress tracking
+- [x] Extract `session_id` from init message and `result` from result message (via `"result" in message` check)
 - [x] Return `AgentHandle { resultPromise, abort }` — `abort()` function for cancellation instead of exposing `queryRef`
-- [ ] Return structured `StepRunResult` (from resultPromise)
-- [ ] Accept `workflowId`, `stepId`, `runId` params (optional in Phase 1, required by Phase 2)
+- [x] Return structured `StepRunResult` (from resultPromise)
+- [x] Accept `workflowId`, `stepId`, `runId` params (optional in Phase 1, required by Phase 2)
 
 ```typescript
 import { query } from '@anthropic-ai/claude-agent-sdk'
@@ -465,7 +465,7 @@ export async function runAgent(opts: {
 - [x] `checkBashSafety(command)` — plain function (not SDK hook) that checks bash commands against dangerous patterns
   - Called inline inside the agent-runner's `for await` loop, not registered as a PreToolUse SDK hook
   - Block dangerous patterns: `rm -rf /`, `sudo`, `chmod 777`, etc.
-- [ ] Future: `sanitizeBashSecrets` — strip API keys from Bash environment (for container mode)
+- [ ] Future: `sanitizeBashSecrets` — strip API keys from Bash environment (for container mode) — NOT IMPLEMENTED (deferred)
 
 ```typescript
 // Defense-in-depth for local (non-Docker) execution.
@@ -511,10 +511,10 @@ export const localSafetyGuard: HookCallback = async (input, toolUseID, { signal 
 
 **Each agent invocation gets its own session** — different steps within the same workflow run do not share session context, preventing context pollution. Data passes between steps via `$steps.{id}.output` references, not session sharing.
 
-- [ ] Store `session_id` in the `sessions` table after each agent run, associating with `step_run_id` (not run_id)
-- [ ] Support session resume: only for retrying the same step, never across steps
-- [ ] Mark sessions as inactive when step completes or fails
-- [ ] Cleanup: delete stale sessions older than configurable retention period
+- [x] Store `session_id` in the `sessions` table after each agent run, associating with `step_run_id` (not run_id)
+- [x] Support session resume: only for retrying the same step, never across steps
+- [x] Mark sessions as inactive when step completes or fails
+- [x] Cleanup: delete stale sessions older than configurable retention period
 
 ### 1.8 MVP Security Strategy (No Docker)
 
@@ -552,16 +552,16 @@ Level 3: PreToolUse Hook interception
 
 ## Acceptance Criteria
 
-- [ ] `generatePlan("Create a workflow that monitors GitHub issues...")` returns valid `Workflow` JSON
-- [ ] DAG validation catches cycles and invalid references
-- [ ] `$steps.{id}.output` references resolve correctly during execution
-- [ ] Agent runner successfully calls Claude Agent SDK `query()` and returns results
-- [ ] Step execution results persist to SQLite (`step_runs` table)
-- [ ] Workflow run records persist to SQLite (`workflow_runs` table)
-- [ ] Session ID is stored and can be used for resume
-- [ ] `localSafetyGuard` blocks `rm -rf /` and similar dangerous commands
-- [ ] Plan modification flow (modify → regenerate) works end-to-end
-- [ ] Failure policy `stop` correctly halts execution and marks remaining steps as skipped
+- [x] `generatePlan("Create a workflow that monitors GitHub issues...")` returns valid `Workflow` JSON
+- [x] DAG validation catches cycles and invalid references
+- [x] `$steps.{id}.output` references resolve correctly during execution
+- [x] Agent runner successfully calls Claude Agent SDK `query()` and returns results
+- [x] Step execution results persist to SQLite (`step_runs` table)
+- [x] Workflow run records persist to SQLite (`workflow_runs` table)
+- [x] Session ID is stored and can be used for resume
+- [x] `localSafetyGuard` blocks `rm -rf /` and similar dangerous commands
+- [x] Plan modification flow (modify → regenerate) works end-to-end
+- [x] Failure policy `stop` correctly halts execution and marks remaining steps as skipped
 
 ---
 

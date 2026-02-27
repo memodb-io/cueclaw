@@ -38,12 +38,12 @@ Phase 2 wraps the Agent Runner in a container, adding OS-level isolation on top 
 
 Controls which host directories can be mounted into containers.
 
-- [ ] Load mount allowlist from `~/.cueclaw/mount-allowlist.json`
-- [ ] Default blocked patterns: `.ssh`, `.gnupg`, `.aws`, `.env`, `credentials`, `private_key`, `.docker`
-- [ ] `validateAdditionalMounts(mounts, allowlist)` — check each mount against allowed roots and blocked patterns
-- [ ] `generateDefaultAllowlist()` — create sensible defaults on first run
-- [ ] Path expansion: `~` → home directory
-- [ ] Blocked mounts throw `ConfigError` with clear message
+- [x] Load mount allowlist from `~/.cueclaw/mount-allowlist.json`
+- [x] Default blocked patterns: `.ssh`, `.gnupg`, `.aws`, `.env`, `credentials`, `private_key`, `.docker`
+- [x] `validateAdditionalMounts(mounts, allowlist)` — check each mount against allowed roots and blocked patterns
+- [x] `generateDefaultAllowlist()` — create sensible defaults on first run
+- [x] Path expansion: `~` → home directory
+- [x] Blocked mounts throw `ConfigError` with clear message
 
 ```typescript
 import { readFileSync, writeFileSync, existsSync } from 'fs'
@@ -118,19 +118,19 @@ function generateDefaultAllowlist(): MountAllowlist {
 
 Spawns Docker containers for step execution with layered mount strategy.
 
-- [ ] `runContainerAgent(opts)` — spawn container, pipe input via stdin, capture output
-- [ ] Mount strategy (layered):
+- [x] `runContainerAgent(opts)` — spawn container, pipe input via stdin, capture output
+- [x] Mount strategy (layered):
   1. Project root → `/workspace/project` (read-only)
   2. Working directory → `/workspace/work` (writable, per-workflow isolation)
   3. IPC directory → `/workspace/ipc` (host ↔ container communication)
   4. Validated additional mounts from config
-- [ ] Stdin/stdout JSON protocol — step input sent via stdin (never written to disk)
-- [ ] Output streaming via markers: `---CUECLAW_OUTPUT_START---` / `---CUECLAW_OUTPUT_END---`
-- [ ] Output size cap: `max_output_size` (default 10MB) with truncation flags
-- [ ] Timeout management: hard timeout + idle timeout, graceful `docker stop` (15s) before SIGKILL
-- [ ] Container naming: `cueclaw-{workflowId}-{stepId}-{timestamp}`
-- [ ] Secrets passed via stdin JSON, NOT environment variables
-- [ ] Container logs written to `~/.cueclaw/logs/container-{timestamp}.log`
+- [x] Stdin/stdout JSON protocol — step input sent via stdin (never written to disk)
+- [x] Output streaming via markers: `---CUECLAW_OUTPUT_START---` / `---CUECLAW_OUTPUT_END---`
+- [x] Output size cap: `max_output_size` (default 10MB) with truncation flags
+- [x] Timeout management: hard timeout + idle timeout, graceful `docker stop` (15s) before SIGKILL
+- [x] Container naming: `cueclaw-{workflowId}-{stepId}-{timestamp}`
+- [x] Secrets passed via stdin JSON, NOT environment variables
+- [x] Container logs written to `~/.cueclaw/logs/container-{timestamp}.log`
 
 ```typescript
 import { spawn, ChildProcess } from 'child_process'
@@ -272,14 +272,14 @@ async function gracefulStop(containerName: string): Promise<void> {
 
 Host-side file-polling watcher for container → host communication.
 
-- [ ] Poll `~/.cueclaw/ipc/{workflowId}/{stepId}/output/` directory for new JSON files
-- [ ] File naming: `{timestamp}-{nanoid}.json` — atomic writes (temp file → rename)
-- [ ] Message types: `progress`, `notification`, `context_request`
-- [ ] Authorization: verify `workflowId` in message matches the IPC directory
-- [ ] Error handling: malformed JSON files moved to `errors/` subdirectory
-- [ ] `_close` sentinel file signals container has finished
-- [ ] Configurable poll interval (default: 500ms)
-- [ ] Write host → container messages to `input/` directory
+- [x] Poll `~/.cueclaw/ipc/{workflowId}/{stepId}/output/` directory for new JSON files
+- [x] File naming: `{timestamp}-{nanoid}.json` — atomic writes (temp file → rename)
+- [x] Message types: `progress`, `notification`, `context_request`
+- [x] Authorization: verify `workflowId` in message matches the IPC directory
+- [x] Error handling: malformed JSON files moved to `errors/` subdirectory
+- [x] `_close` sentinel file signals container has finished
+- [x] Configurable poll interval (default: 500ms)
+- [x] Write host → container messages to `input/` directory
 
 ```typescript
 export class IpcWatcher {
@@ -372,10 +372,10 @@ interface IpcMessage {
 
 Processes IPC output from containers and dispatches to the appropriate handlers.
 
-- [ ] Handle `progress` messages: update step status in DB, forward to onProgress callback
-- [ ] Handle `notification` messages: route through MessageRouter to all connected Channels
-- [ ] Handle `context_request` messages: load requested step outputs from DB, write to IPC input
-- [ ] Integrate with IpcWatcher — receives parsed IpcMessages
+- [x] Handle `progress` messages: update step status in DB, forward to onProgress callback
+- [x] Handle `notification` messages: route through MessageRouter to all connected Channels
+- [x] Handle `context_request` messages: load requested step outputs from DB, write to IPC input
+- [x] Integrate with IpcWatcher — receives parsed IpcMessages
 
 ```typescript
 export class McpMessageHandler {
@@ -438,8 +438,8 @@ export class McpMessageHandler {
 > **Implementation note:** The actual implementation uses plain exported async functions (not a real MCP server). The `@modelcontextprotocol/sdk` is not used. Functions are called directly by the container agent runner, not via MCP protocol.
 
 - [x] Plain exported functions (not MCP server): `reportProgress()`, `notify()`, `getContext()`
-- [ ] Reads context from environment: `CUECLAW_WORKFLOW_ID`, `CUECLAW_STEP_ID`, `CUECLAW_RUN_ID`
-- [ ] Atomic file writes to IPC output directory (temp file → rename)
+- [x] Reads context from environment: `CUECLAW_WORKFLOW_ID`, `CUECLAW_STEP_ID`, `CUECLAW_RUN_ID`
+- [x] Atomic file writes to IPC output directory (temp file → rename)
 - [ ] Tools:
   - `cueclaw_report_progress` — write progress update to IPC
   - `cueclaw_notify` — send notification to user via IPC → host → Channels
@@ -541,16 +541,16 @@ await server.connect(transport)
 
 Entry point for the agent running inside the Docker container.
 
-- [ ] Read step input from stdin (JSON)
-- [ ] Call Claude Agent SDK `query()` with:
+- [x] Read step input from stdin (JSON)
+- [x] Call Claude Agent SDK `query()` with:
   - Working directory: `/workspace/work`
   - Allowed tools from input
   - MCP server as tool provider
   - `settingSources: ['project']` for skills from `/workspace/project/.claude/skills/`
-- [ ] Stream output using marker protocol for host capture
-- [ ] Poll IPC input directory for mid-execution messages from host (every 500ms)
-- [ ] Detect `_close` sentinel for graceful shutdown
-- [ ] Extract and return session_id and result
+- [x] Stream output using marker protocol for host capture
+- [x] Poll IPC input directory for mid-execution messages from host (every 500ms)
+- [x] Detect `_close` sentinel for graceful shutdown
+- [x] Extract and return session_id and result
 
 ```typescript
 import { query } from '@anthropic-ai/claude-agent-sdk'
@@ -637,15 +637,15 @@ const ipcPoller = setInterval(() => {
 
 ### 2.7 Container Image (`container/Dockerfile` + `container/build.sh`)
 
-- [ ] Dockerfile: `node:22-slim` base, install agent-runner, non-root user
-- [ ] `build.sh`: build agent-runner TypeScript, then `docker build`
-- [ ] `.dockerignore` to exclude unnecessary files
+- [x] Dockerfile: `node:22-slim` base, install agent-runner, non-root user
+- [x] `build.sh`: build agent-runner TypeScript, then `docker build`
+- [x] `.dockerignore` to exclude unnecessary files
 
 ```dockerfile
 # container/Dockerfile
 FROM node:22-slim
 
-RUN groupadd -g 1000 agent && useradd -u 1000 -g agent -m agent
+RUN groupadd -g 1000 agent 2>/dev/null || true && useradd -u 1000 -g agent -m agent 2>/dev/null || true
 
 WORKDIR /app/agent-runner
 COPY agent-runner/dist/ ./dist/
@@ -658,7 +658,8 @@ ENTRYPOINT ["node", "/app/agent-runner/dist/index.js"]
 
 ```bash
 #!/bin/bash
-# container/build.sh
+# container/build.sh — builds and tags with three tags:
+# cueclaw-agent:latest, ghcr.io/memodb-io/cueclaw-agent:latest, ghcr.io/memodb-io/cueclaw-agent:{version}
 set -euo pipefail
 
 cd "$(dirname "$0")/agent-runner"
@@ -666,8 +667,11 @@ pnpm install
 pnpm build
 
 cd ..
-docker build -t cueclaw-agent:latest .
-echo "Container image built: cueclaw-agent:latest"
+VERSION=$(node -e "console.log(require('../package.json').version)")
+docker build -t cueclaw-agent:latest \
+  -t ghcr.io/memodb-io/cueclaw-agent:latest \
+  -t "ghcr.io/memodb-io/cueclaw-agent:${VERSION}" .
+echo "Container image built: cueclaw-agent:latest (+ GHCR tags for v${VERSION})"
 ```
 
 **Container agent-runner package.json:**
@@ -704,7 +708,7 @@ First-run setup wizard accessible via `cueclaw setup`.
 - [x] `src/setup-container.ts` — build container image (`container/build.sh`)
 - [x] `src/setup-auth.ts` — validate API key works (test API call)
 - [x] `src/setup-verify.ts` — smoke test: spawn container, verify Node.js runs
-- [ ] Register `cueclaw setup` command in CLI
+- [x] Register `cueclaw setup` command in CLI
 
 ```typescript
 // setup/index.ts
@@ -731,14 +735,26 @@ export async function runSetup(config: CueclawConfig): Promise<void> {
 }
 ```
 
-### 2.9 Agent Runner Mode Switch (`src/agent-runner.ts`)
+### 2.9 Docker Image Management (`src/container-runtime.ts`)
+
+Ensures the container image is available before execution — auto-builds in dev, auto-pulls in production.
+
+- [x] `isDockerImageAvailable(image)` — `docker image inspect`, cached per image
+- [x] `ensureDockerImage(image)` — checks local cache, then:
+  - Dev mode (`isDev=true`): runs `container/build.sh` via `buildDevImage()`
+  - Production: attempts `docker pull` with 5-minute timeout
+- [x] `buildDevImage(image)` — resolves `container/build.sh` relative to `import.meta.url`, runs with `stdio: 'inherit'`
+- [x] `getDefaultImage()` in `config.ts` — dev returns `'cueclaw-agent:latest'`, prod returns `'ghcr.io/memodb-io/cueclaw-agent:{version}'`
+- [x] Agent runner calls `ensureDockerImage()` before container execution — falls back to local execution if unavailable
+
+### 2.10 Agent Runner Mode Switch (`src/agent-runner.ts`)
 
 Update the existing agent runner to support both local and container execution.
 
-- [ ] Check `config.container.enabled` to decide mode
-- [ ] Container mode: delegate to `runContainerAgent()` from `container-runner.ts`
-- [ ] Local mode: existing `query()` call with `localSafetyGuard` hooks
-- [ ] Same return type — transparent to the Executor
+- [x] Check `config.container.enabled` to decide mode
+- [x] Container mode: delegate to `runContainerAgent()` from `container-runner.ts`
+- [x] Local mode: existing `query()` call with `localSafetyGuard` hooks
+- [x] Same return type — transparent to the Executor
 
 ```typescript
 // src/agent-runner.ts — updated
@@ -801,8 +817,9 @@ Add to `~/.cueclaw/config.yaml`:
 
 ```yaml
 container:
-  enabled: true                    # false = local execution with PreToolUse hooks only
-  image: cueclaw-agent:latest
+  enabled: false                   # Default: false. Set true = container execution with Docker isolation
+  image: ghcr.io/memodb-io/cueclaw-agent:0.1.2  # Default: version-pinned via getDefaultImage()
+                                   # Dev mode defaults to 'cueclaw-agent:latest' (local build)
   timeout: 1800000                 # 30 min hard timeout per step
   max_output_size: 10485760        # 10MB output cap
   idle_timeout: 1800000            # 30 min idle timeout
@@ -813,7 +830,7 @@ Add to Zod config schema (`src/config.ts`):
 ```typescript
 container: z.object({
   enabled: z.boolean().default(false),
-  image: z.string().default('cueclaw-agent:latest'),
+  image: z.string().default(getDefaultImage()),  // Dev: 'cueclaw-agent:latest', Prod: 'ghcr.io/memodb-io/cueclaw-agent:{version}'
   timeout: z.number().default(1_800_000),
   max_output_size: z.number().default(10_485_760),
   idle_timeout: z.number().default(1_800_000),
@@ -825,22 +842,22 @@ container: z.object({
 
 ## Acceptance Criteria
 
-- [ ] `cueclaw setup` validates Docker, builds container image, runs smoke test
-- [ ] Container starts with correct mount strategy (project read-only, work writable, IPC mounted)
-- [ ] Stdin JSON protocol delivers step input to container agent
-- [ ] Container agent executes Claude Agent SDK `query()` and streams output via markers
-- [ ] IPC round-trip works: container writes to output/, host reads and processes
-- [ ] MCP tools (`cueclaw_report_progress`, `cueclaw_notify`, `cueclaw_get_context`) work inside container
-- [ ] Mount allowlist blocks access to `.ssh`, `.gnupg`, `.aws` and other sensitive directories
-- [ ] Container hard timeout works: graceful `docker stop` → SIGKILL
-- [ ] Container idle timeout works: kills container after inactivity
-- [ ] Output size cap prevents memory exhaustion (truncation at 10MB)
-- [ ] `runAgent()` transparently switches between local and container mode based on config
-- [ ] All existing Phase 1 tests pass (local mode unchanged)
-- [ ] Container-specific tests pass with Docker available
-- [ ] Non-root user execution inside container
-- [ ] No network access by default (`--network none`)
-- [ ] Secrets not exposed as environment variables (stdin-only delivery)
+- [x] `cueclaw setup` validates Docker, builds container image, runs smoke test
+- [x] Container starts with correct mount strategy (project read-only, work writable, IPC mounted)
+- [x] Stdin JSON protocol delivers step input to container agent
+- [x] Container agent executes Claude Agent SDK `query()` and streams output via markers
+- [x] IPC round-trip works: container writes to output/, host reads and processes
+- [x] MCP tools (`cueclaw_report_progress`, `cueclaw_notify`, `cueclaw_get_context`) work inside container
+- [x] Mount allowlist blocks access to `.ssh`, `.gnupg`, `.aws` and other sensitive directories
+- [x] Container hard timeout works: graceful `docker stop` → SIGKILL
+- [x] Container idle timeout works: kills container after inactivity
+- [x] Output size cap prevents memory exhaustion (truncation at 10MB)
+- [x] `runAgent()` transparently switches between local and container mode based on config
+- [x] All existing Phase 1 tests pass (local mode unchanged)
+- [x] Container-specific tests pass with Docker available
+- [x] Non-root user execution inside container
+- [x] No network access by default (`--network none`)
+- [x] Secrets not exposed as environment variables (stdin-only delivery)
 
 ---
 

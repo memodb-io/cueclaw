@@ -22,13 +22,13 @@ cueclaw config get    # Reads config values
 
 ### 0.1 Initialize Project
 
-- [ ] `pnpm init` with ESM config (`"type": "module"`)
-- [ ] TypeScript config (`tsconfig.json`) targeting ES2022, NodeNext module resolution
-- [ ] ESLint flat config with TypeScript plugin
-- [ ] Vitest config (`vitest.config.ts`)
-- [ ] tsup/tsdown build config for `src/cli.ts` → `dist/cli.js`
-- [ ] `.gitignore` (node_modules, dist, *.db, .env, ~/.cueclaw)
-- [ ] `.env.example` with `ANTHROPIC_API_KEY` placeholder
+- [x] `pnpm init` with ESM config (`"type": "module"`)
+- [x] TypeScript config (`tsconfig.json`) targeting ES2022, NodeNext module resolution
+- [x] ESLint flat config with TypeScript plugin
+- [x] Vitest config (`vitest.config.ts`)
+- [x] tsup/tsdown build config for `src/cli.ts` → `dist/cli.js`
+- [x] `.gitignore` (node_modules, dist, *.db, .env, ~/.cueclaw)
+- [x] `.env.example` with `ANTHROPIC_API_KEY` placeholder
 
 ```json
 // package.json essentials
@@ -47,12 +47,12 @@ cueclaw config get    # Reads config values
 
 ### 0.2 CLI Skeleton (`src/cli.ts`)
 
-- [ ] Use `commander` for CLI argument parsing
-- [ ] Register subcommands: `new`, `list`, `status`, `pause`, `resume`, `delete`, `daemon`, `info`, `bot`, `tui`, `config`
-- [ ] Default command (no args) = `tui` (stub for now — just prints "TUI coming in Phase 3")
-- [ ] `cueclaw info` prints loaded config summary
-- [ ] `--version` flag from package.json
-- [ ] Shebang line (`#!/usr/bin/env node`) in CLI entry
+- [x] Use `commander` for CLI argument parsing
+- [x] Register subcommands: `new`, `list`, `status`, `pause`, `resume`, `delete`, `daemon`, `info`, `bot`, `tui`, `config`
+- [x] Default command (no args) = `tui`
+- [x] `cueclaw info` prints loaded config summary
+- [x] `--version` flag from package.json
+- [x] Shebang line (`#!/usr/bin/env node`) in CLI entry
 
 ```typescript
 // src/cli.ts — skeleton
@@ -78,11 +78,11 @@ program.parse()
 
 ### 0.3 Config System (`src/config.ts`)
 
-- [ ] Load YAML with priority chain: `~/.cueclaw/config.yaml` → `./.cueclaw/config.yaml` → env vars → CLI args
-- [ ] Zod schema for validation with clear error messages
-- [ ] `ensureCueclawHome()` — create `~/.cueclaw/` directory structure on first run
-- [ ] Support `${ENV_VAR}` interpolation in YAML values
-- [ ] Export typed config object
+- [x] Load YAML with priority chain: `~/.cueclaw/config.yaml` → `./.cueclaw/config.yaml` → env vars → CLI args
+- [x] Zod schema for validation with clear error messages
+- [x] `ensureCueclawHome()` — create `~/.cueclaw/` directory structure on first run
+- [x] Support `${ENV_VAR}` interpolation in YAML values
+- [x] Export typed config object
 
 ```typescript
 // src/config.ts — key types
@@ -117,17 +117,17 @@ export type CueclawConfig = z.infer<typeof ConfigSchema>
 
 ### 0.4 Environment & Secrets (`src/env.ts`)
 
-- [ ] Parse `.env` file using `dotenv.parse(readFileSync('.env'))` — returns a plain object without writing to `process.env`
-- [ ] Secrets stored in memory object, NOT in `process.env`
-- [ ] Export `getSecret(key: string): string | undefined`
-- [ ] Warn if `ANTHROPIC_API_KEY` is missing on startup
+- [x] Parse `.env` file using `dotenv.parse(readFileSync('.env'))` — returns a plain object without writing to `process.env`
+- [x] Secrets stored in memory object, NOT in `process.env`
+- [x] Export `getSecret(key: string): string | undefined`
+- [x] Warn if `ANTHROPIC_API_KEY` is missing on startup
 
 ### 0.5 Logger (`src/logger.ts`)
 
-- [ ] pino with pino-pretty for development
-- [ ] Log level from config
-- [ ] Child loggers with context (`{ workflowId, step }`)
-- [ ] Log to file in daemon mode (`~/.cueclaw/logs/daemon.log`)
+- [x] pino with pino-pretty for development
+- [x] Log level from config
+- [x] Child loggers with context (`{ workflowId, step }`)
+- [x] Log to file in daemon mode (`~/.cueclaw/logs/daemon.log`)
 
 ```typescript
 import pino from 'pino'
@@ -143,12 +143,12 @@ export const logger = pino({
 
 ### 0.6 Type Definitions (`src/types.ts`)
 
-- [ ] All core types from [docs/types.md](../docs/types.md): `PlannerOutput`, `Workflow`, `PlanStep`, `StepStatus`, `WorkflowPhase`, `TriggerConfig`, `FailurePolicy`
-- [ ] `Channel` interface (including `sendConfirmation`) and `OnInboundMessage` type
-- [ ] `NewMessage` type for inbound messages
-- [ ] CueClaw MCP tool input types
-- [ ] Error hierarchy: `CueclawError` base class + `PlannerError`, `ExecutorError`, `TriggerError`, `ConfigError`
-- [ ] Export everything — this file is imported by nearly every module
+- [x] All core types from [docs/types.md](../docs/types.md): `PlannerOutput`, `Workflow`, `PlanStep`, `StepStatus`, `WorkflowPhase`, `TriggerConfig`, `FailurePolicy`
+- [x] `Channel` interface (including `sendConfirmation`) and `OnInboundMessage` type
+- [x] `NewMessage` type for inbound messages
+- [x] CueClaw MCP tool input types
+- [x] Error hierarchy: `CueclawError` base class + `PlannerError`, `ExecutorError`, `TriggerError`, `ConfigError`
+- [x] Export everything — this file is imported by nearly every module
 
 ```typescript
 // src/types.ts — error hierarchy
@@ -175,11 +175,11 @@ export class ConfigError extends CueclawError {
 
 ### 0.7 SQLite Database (`src/db.ts`)
 
-- [ ] Initialize `better-sqlite3` with WAL mode
-- [ ] Create all tables from the schema (see [docs/types.md](../docs/types.md#database-schema-sqlite))
-- [ ] Inline migration system: version check on startup, `ALTER TABLE` for incremental changes
-- [ ] Basic CRUD helpers: `insertWorkflow`, `getWorkflow`, `updateWorkflowPhase`, etc.
-- [ ] DB file location: `~/.cueclaw/db/cueclaw.db`
+- [x] Initialize `better-sqlite3` with WAL mode
+- [x] Create all tables from the schema (see [docs/types.md](../docs/types.md#database-schema-sqlite))
+- [x] Inline migration system: version check on startup, `ALTER TABLE` for incremental changes
+- [x] Basic CRUD helpers: `insertWorkflow`, `getWorkflow`, `updateWorkflowPhase`, etc.
+- [x] DB file location: `~/.cueclaw/db/cueclaw.db`
 
 ```typescript
 import Database from 'better-sqlite3'
@@ -197,22 +197,22 @@ export function initDb(): Database.Database {
 
 ### 0.8 Default Config File
 
-- [ ] Create `config.yaml` template in the repo root (for reference)
-- [ ] First-run experience: if `~/.cueclaw/config.yaml` doesn't exist, copy template and prompt user to fill in API key
+- [x] Create `config.yaml` template in the repo root (for reference)
+- [x] First-run experience: if `~/.cueclaw/config.yaml` doesn't exist, copy template and prompt user to fill in API key
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `pnpm build` succeeds with no errors
-- [ ] `pnpm test` runs (even with zero tests — Vitest initializes cleanly)
-- [ ] `pnpm lint` passes
-- [ ] `cueclaw --version` prints version
-- [ ] `cueclaw --help` shows all subcommand stubs
-- [ ] `cueclaw info` loads config and prints summary (or prompts for first-time setup)
-- [ ] `~/.cueclaw/` directory structure is created automatically
-- [ ] `~/.cueclaw/db/cueclaw.db` is created with all tables
-- [ ] Zod config validation catches malformed YAML with clear error messages
+- [x] `pnpm build` succeeds with no errors
+- [x] `pnpm test` runs (even with zero tests — Vitest initializes cleanly)
+- [x] `pnpm lint` passes
+- [x] `cueclaw --version` prints version
+- [x] `cueclaw --help` shows all subcommand stubs
+- [x] `cueclaw info` loads config and prints summary (or prompts for first-time setup)
+- [x] `~/.cueclaw/` directory structure is created automatically
+- [x] `~/.cueclaw/db/cueclaw.db` is created with all tables
+- [x] Zod config validation catches malformed YAML with clear error messages
 
 ---
 

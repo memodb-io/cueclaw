@@ -100,17 +100,54 @@ cueclaw/
 │   │   └── tui.ts               # TUI Channel (Ink)
 │   │
 │   └── tui/
-│       ├── app.tsx              # Ink root component — multi-view (onboarding/chat/execution)
-│       ├── theme.ts             # @inkjs/ui extendTheme — semantic color definitions
+│       ├── app.tsx              # Ink root — composition shell (~30 lines)
+│       ├── app-provider.tsx     # State management + business logic (context provider)
+│       ├── app-layout.tsx       # View routing (reads from context)
+│       ├── chat.tsx             # Chat layout shell (MainContent + Composer)
+│       ├── main-content.tsx     # Message list, scroll, streaming text, thinking indicator
+│       ├── composer.tsx         # Input bar, status bar, command hints
+│       ├── banner.tsx           # ASCII art logo with gradient coloring
+│       ├── thinking-indicator.tsx # Animated spinner with elapsed time
+│       ├── resettable-input.tsx # Input with reset + history navigation
+│       ├── half-line-padded-box.tsx # Box with half-line color padding
+│       ├── dialog-manager.tsx   # Priority-queued modal dialog system
+│       ├── use-keypress.tsx     # Priority-based keyboard dispatch system
+│       ├── key-bindings.ts      # Centralized key binding definitions
+│       ├── use-input-history.ts # Shell-like up/down input history
+│       ├── ui-state-context.ts  # Read-only UI state context
+│       ├── ui-actions-context.ts # Action callbacks context
+│       ├── color-utils.ts       # Hex/RGB conversion, color interpolation
+│       ├── theme.ts             # @inkjs/ui extendTheme + cueclawTheme
 │       ├── version.ts           # Dynamic version detection (dev vs package.json)
-│       ├── chat.tsx             # Chat component (messages, streaming, command autocomplete)
-│       ├── commands.ts          # Slash command registry (14 commands: /help, /list, /status, etc.)
 │       ├── daemon-bridge.ts     # TUI ↔ daemon abstraction (external service or in-process)
-│       ├── onboarding.tsx       # Interactive setup wizard (API key, base URL, bots)
-│       ├── renderers.tsx        # Workflow display components (WorkflowTable, WorkflowDetail)
-│       ├── plan-view.tsx        # Plan display/confirmation component
-│       ├── execution-view.tsx   # Live execution progress panel
-│       └── status.tsx           # Running status panel
+│       ├── onboarding.tsx       # Interactive setup wizard
+│       ├── renderers.tsx        # WorkflowTable, WorkflowDetail components
+│       ├── plan-view.tsx        # Plan display/confirmation
+│       ├── execution-view.tsx   # Live execution progress
+│       ├── workflow-detail-view.tsx # Workflow detail (trigger, steps, runs)
+│       ├── status.tsx           # Running status panel
+│       ├── commands/            # Slash command registry + 16 individual command files
+│       │   ├── types.ts         # SlashCommand, CommandContext interfaces
+│       │   ├── registry.ts      # registerCommand, findCommand, parseSlashCommand
+│       │   └── *.ts             # help, list, status, pause, resume, delete, config,
+│       │                        #   daemon, info, clear, new, cancel, bot, setup, theme, quit
+│       ├── hooks/               # Extracted business logic hooks
+│       │   ├── use-daemon-bridge.ts
+│       │   ├── use-planner-session.ts
+│       │   ├── use-workflow-execution.ts
+│       │   ├── use-global-keypress.ts
+│       │   ├── use-command-dispatch.ts
+│       │   └── exit-helpers.ts
+│       ├── messages/            # Per-type message display components
+│       │   ├── message-display.tsx
+│       │   ├── user-message.tsx, assistant-message.tsx, ...
+│       │   └── warning-message.tsx, plan-ready-message.tsx
+│       └── theme/               # Full theme system
+│           ├── colors-theme.ts  # Raw color palette interface
+│           ├── semantic-colors.ts # Semantic color layer
+│           ├── themes.ts        # 3 built-in themes (dark, light, dracula)
+│           ├── theme-manager.ts # Singleton theme manager
+│           └── index.ts         # Lazy proxy for current theme
 │
 ├── container/                   # Agent container (Phase 2: Docker isolation)
 │   ├── Dockerfile
@@ -140,6 +177,7 @@ cueclaw/
 ├── config.yaml                      # Config (Claude API, Bot tokens, etc.)
 ├── db/
 │   └── cueclaw.db                   # SQLite
+├── daemon.pid                       # Daemon PID file (written by startDaemon/spawnDaemonProcess)
 ├── logs/                            # Created by initLogger() at startup
 │   ├── daemon.log                   # All process logs (appended via pino multistream)
 │   └── executions/
@@ -204,44 +242,84 @@ The session maintains full message history so the LLM has context across turns. 
 
 The TUI uses a `DaemonBridge` abstraction to decouple from the backend daemon:
 
-- **External mode** (`isExternal: true`): A system service daemon (launchd/systemd) is running — TUI acts as frontend only
+- **External mode** (`isExternal: true`): A system service daemon (launchd/systemd) or background process is running — TUI acts as frontend only
 - **In-process mode** (`isExternal: false`): No external daemon — TUI starts `TriggerLoop`, `MessageRouter`, and bot channels in-process
 
-**Discovery mechanism:** At startup, `initDaemonBridge()` calls `getServiceStatus()` from `src/service.ts`, which checks the OS service manager:
-- **macOS**: `launchctl list com.cueclaw` — looks for `"PID"` in output to determine if running
-- **Linux**: `systemctl --user is-active cueclaw` — checks if systemd reports `active`
-- If the command fails or service is not installed, returns `'stopped'` (falls back to in-process mode)
+**Discovery mechanism:** At startup, `initDaemonBridge()` checks for a running daemon via two methods:
+1. **PID file** (`~/.cueclaw/daemon.pid`): `isDaemonRunning()` reads the PID file and probes `process.kill(pid, 0)` to verify the process is alive
+2. **System service** fallback: calls `getServiceStatus()` from `src/service.ts` — checks `launchctl list com.cueclaw` (macOS) or `systemctl --user is-active cueclaw` (Linux)
+- If neither detects a running daemon, falls back to in-process mode
 
 Bot channels (Telegram/WhatsApp) can be started lazily via `startBotChannels()` after user confirmation, avoiding startup delays (e.g., WhatsApp QR scan).
 
 ## TUI Architecture
 
-The TUI is a multi-view Ink/React application:
+The TUI is a decomposed Ink/React application with a layered provider/context/hook architecture:
 
 ```
-┌─────────────────────────────────────────┐
-│ App                                      │
-│ ┌─────────────────────────────────────┐  │
-│ │ View: Onboarding                    │  │  First-run setup wizard
-│ │  → API Key → Base URL → Container   │  │  (skipped if configured)
-│ │  → Telegram → WhatsApp → Done       │  │
-│ └─────────────────────────────────────┘  │
-│ ┌─────────────────────────────────────┐  │
-│ │ View: Chat                          │  │  Main interaction view
-│ │  → Slash commands (/help, /list...) │  │  Multi-turn planner conversation
-│ │  → Command autocomplete             │  │  Streaming text display
-│ └─────────────────────────────────────┘  │
-│ ┌─────────────────────────────────────┐  │
-│ │ View: Plan / Execution              │  │  Plan confirmation (Y/M/N)
-│ │  → Plan confirmation                │  │  Live execution progress
-│ │  → Real-time step progress          │  │
-│ └─────────────────────────────────────┘  │
-└─────────────────────────────────────────┘
+App (app.tsx — ~30 lines, composition shell)
+ └─ ThemeProvider (@inkjs/ui)
+     └─ KeypressProvider (use-keypress.tsx — priority-based input dispatch)
+         └─ DialogManager (dialog-manager.tsx — priority-queued modals)
+             └─ AppProvider (app-provider.tsx — state + business logic)
+                 └─ AppLayout (app-layout.tsx — view routing)
+                     ├─ Onboarding
+                     ├─ Chat
+                     │   ├─ MainContent (main-content.tsx — messages, scroll, streaming, thinking indicator)
+                     │   └─ Composer (composer.tsx — input, status bar, command hints)
+                     ├─ PlanView
+                     ├─ ExecutionView
+                     └─ Status
+```
 
-Slash Commands (tui/commands.ts):
-  /help, /list, /status, /pause, /resume, /delete,
-  /config, /daemon, /info, /clear, /new, /cancel,
-  /bot, /setup
+**Context layer** (replaces prop drilling):
+- `UIStateContext` (ui-state-context.ts) — read-only state: view, messages, workflow, streaming text, daemon status, theme version, etc.
+- `UIActionsContext` (ui-actions-context.ts) — action callbacks: handleChatSubmit, handleConfirm, handleModify, etc.
+
+**Custom hooks** (extracted from the old monolith, in `tui/hooks/`):
+- `use-daemon-bridge` — starts daemon bridge, tracks status
+- `use-planner-session` — manages planner session, user message handling, cancel generation
+- `use-workflow-execution` — manages abort map, confirm/modify/cancel/abort/back actions
+- `use-global-keypress` — Ctrl+C (exit dialog), Ctrl+D (workflow table)
+- `use-command-dispatch` — dispatches `/`-prefixed commands via registry
+- `exit-helpers` — exit logic, farewell message, session duration
+
+**Key systems:**
+- `KeypressProvider` — single `useInput` dispatching to priority-sorted handlers (Low=0, Normal=100, High=200, Critical=300)
+- `DialogManager` — priority-queued modal dialogs (e.g., exit confirmation), renders at Critical priority to block underlying handlers
+- Input history — shell-like up/down arrow navigation via `use-input-history.ts`
+- `key-bindings.ts` — centralized key binding definitions
+
+**Theme system** (`tui/theme/` directory):
+- `colors-theme.ts` — raw color palette interface (foreground, background, accents, gradients)
+- `semantic-colors.ts` — semantic layer (`text.primary`, `status.error`, `border.focused`)
+- `themes.ts` — three built-in themes: dark (Catppuccin Mocha), light (Catppuccin Latte), dracula
+- `theme-manager.ts` — singleton manager with `setTheme(name)`, live switching
+- `index.ts` — lazy proxy that always reflects current theme
+- `color-utils.ts` — `hexToRgb`, `rgbToHex`, `interpolateColor` for gradient blending
+
+**Message components** (`tui/messages/`):
+- `message-display.tsx` — dispatcher to per-type components
+- Per-type: `user-message`, `assistant-message`, `assistant-jsx-message`, `system-message`, `error-message`, `warning-message`, `plan-ready-message`
+
+**Command registry** (`tui/commands/` directory):
+- `types.ts` — `SlashCommand` interface with optional `completion` field
+- `registry.ts` — `registerCommand`, `getCommands`, `findCommand`, `parseSlashCommand`
+- Individual command files: help, list, status, pause, resume, delete, config, daemon, info, clear, new, cancel, bot, setup, theme, quit
+- `/theme [dark|light|dracula]` — live theme switching
+
+**Views:** `'onboarding' | 'chat' | 'plan' | 'execution' | 'status' | 'detail'`
+
+**ChatMessage type** (discriminated union):
+```typescript
+type ChatMessage =
+  | { type: 'user'; text: string }
+  | { type: 'assistant'; text: string }
+  | { type: 'assistant-jsx'; content: React.ReactNode }
+  | { type: 'system'; text: string }
+  | { type: 'error'; text: string }
+  | { type: 'warning'; text: string }
+  | { type: 'plan-ready'; workflowName: string }
 ```
 
 ### Onboarding Flow

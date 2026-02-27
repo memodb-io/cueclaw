@@ -247,16 +247,23 @@ The multi-turn planner uses three tools:
 ### Chat Message
 
 ```typescript
-interface ChatMessage {
-  role: 'user' | 'system' | 'assistant'
-  text?: string                     // Plain text content
-  content?: React.ReactNode         // Rich content (e.g., WorkflowTable component)
-}
+/** Discriminated union by `type` field (not `role`) */
+type ChatMessage =
+  | { type: 'user'; text: string }
+  | { type: 'assistant'; text: string }
+  | { type: 'assistant-jsx'; content: React.ReactNode }  // Rich content (e.g., WorkflowTable)
+  | { type: 'system'; text: string }
+  | { type: 'error'; text: string }
+  | { type: 'warning'; text: string }
+  | { type: 'plan-ready'; workflowName: string }
 ```
+
+Defined in `src/tui/ui-state-context.ts`.
 
 ### Slash Commands
 
 ```typescript
+/** Defined in src/tui/commands/types.ts */
 interface CommandContext {
   db: Database.Database
   config: CueclawConfig | null
@@ -265,6 +272,7 @@ interface CommandContext {
   addMessage: (msg: ChatMessage) => void
   clearMessages: () => void
   setConfig: (config: CueclawConfig) => void
+  setThemeVersion: (fn: (v: number) => number) => void  // Triggers re-render on theme change
 }
 
 interface SlashCommand {
@@ -272,9 +280,12 @@ interface SlashCommand {
   aliases: string[]                 // Alternative names (e.g., ['ls'])
   description: string
   usage: string                     // Usage string (e.g., '/list')
+  completion?: string[]             // Subcommand completion list (e.g., ['start', 'status'] for /bot)
   execute: (args: string, ctx: CommandContext) => Promise<void> | void
 }
 ```
+
+Commands are registered individually in `src/tui/commands/` via `registerCommand()` and discovered via `findCommand()` / `getCommands()`.
 
 ### Daemon Bridge
 
@@ -291,6 +302,21 @@ interface InitDaemonBridgeOptions {
 }
 ```
 
+## Channel Context
+
+```typescript
+/** Identifies the channel and sender for context-aware behavior (e.g., planner system prompt) */
+interface ChannelContext {
+  channel: 'tui' | 'telegram' | 'whatsapp'
+  chatJid?: string   // bot channels only
+  sender?: string    // bot channels only
+}
+```
+
+`ChannelContext` is threaded through `PlannerSession`, `generatePlan`, `modifyPlan`, and `MessageRouter` so the planner can adapt its system prompt:
+- **Bot channels**: planner knows the chat ID and can generate workflows that notify the user directly
+- **TUI**: planner requires explicit recipient input for notifications
+
 ## Channel Interface
 
 ```typescript
@@ -301,7 +327,8 @@ interface InitDaemonBridgeOptions {
 interface Channel {
   name: string
   connect(): Promise<void>
-  sendMessage(jid: string, text: string): Promise<void>
+  sendMessage(jid: string, text: string): Promise<string>   // Returns a message ID for edit support
+  editMessage?(jid: string, messageId: string, text: string): Promise<void>  // In-place message editing
   sendConfirmation(jid: string, workflow: Workflow): Promise<void>  // Plan confirmation (each channel renders differently)
   isConnected(): boolean
   ownsJid(jid: string): boolean
@@ -320,7 +347,9 @@ interface NewMessage {
 type OnInboundMessage = (chatJid: string, message: NewMessage) => void
 ```
 
-TUI also implements the Channel interface, with `jid` set to a fixed value like `"local"`.
+TUI also implements the Channel interface, with `jid` set to a fixed value like `"local"`. TUI's `sendMessage` returns `''` (no meaningful ID). Bot channels return platform message IDs (Telegram `message_id`, WhatsApp `key.id`).
+
+`editMessage()` enables in-place status updates in the router — e.g., "Generating execution plan..." is edited to "✅ Execution plan generated." on success. Falls back to `sendMessage` when `editMessage` is not available.
 
 `sendConfirmation()` is implemented by each Channel with its own rendering:
 - **TUI**: Plan view component + keyboard shortcuts (Y/M/N)

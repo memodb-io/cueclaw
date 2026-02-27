@@ -34,123 +34,50 @@ The TUI wraps these existing modules in a visual, interactive experience.
 
 ### 3.1 Ink Framework Setup
 
-- [ ] Install Ink v5 + React 18 + `@inkjs/ui`
-- [ ] Create `src/tui/app.tsx` as the Ink root component
-- [ ] Wire up `cueclaw tui` (and bare `cueclaw`) CLI command to render `<App />`
-- [ ] State management: `useReducer` for global app state (current view, active workflow, messages)
-- [ ] View router: switch between Chat, Plan, Dashboard, and Execution views
-- [ ] `ThemeProvider` wraps the entire App, providing unified semantic colors
+- [x] Install Ink v5 + React 18 + `@inkjs/ui`
+- [x] Create `src/tui/app.tsx` as the Ink root component
+- [x] Wire up `cueclaw tui` (and bare `cueclaw`) CLI command to render `<App />`
+- [x] State management: decomposed into context providers + custom hooks (not `useReducer`)
+- [x] View router: `AppLayout` switches between views based on `UIStateContext`
+- [x] `ThemeProvider` wraps the entire App, providing unified semantic colors
+- [x] `exitOnCtrlC: false` passed to Ink's `render()` — Ctrl+C handled by priority keypress system
+
+**Decomposed architecture** — `app.tsx` is a ~30-line composition shell:
 
 ```typescript
-// src/tui/app.tsx — skeleton
-import React, { useReducer } from 'react'
-import { Box } from 'ink'
-import { ThemeProvider } from '@inkjs/ui'
-import { cueclawTheme } from './theme.js'
-import { Chat } from './chat.js'
-import { PlanView } from './plan-view.js'
-import { Status } from './status.js'
-
-type View = 'onboarding' | 'chat' | 'plan' | 'dashboard' | 'execution'
-
-export function App() {
-  const [state, dispatch] = useReducer(appReducer, initialState)
-
-  return (
-    <ThemeProvider theme={cueclawTheme}>
-      <Box flexDirection="column" height="100%">
-        {/* Static title header: "CueClaw" + version + path */}
-        <Static items={state.view !== 'onboarding' ? ['banner'] : []}>
-          {(item) => (
-            <Box key={item} flexDirection="column" paddingX={1} paddingY={1}>
-              <Text color="cyan" bold>CueClaw</Text>
-              <Text dimColor>{versionLabel} · {displayPath}</Text>
-            </Box>
-          )}
-        </Static>
-        {state.view === 'chat' && <Chat onPlanGenerated={(wf) => dispatch({ type: 'SHOW_PLAN', workflow: wf })} />}
-        {state.view === 'plan' && <PlanView workflow={state.workflow} onConfirm={...} onModify={...} onCancel={...} />}
-        {state.view === 'dashboard' && <Status workflows={state.workflows} />}
-        {state.view === 'execution' && <ExecutionView run={state.activeRun} />}
-      </Box>
-    </ThemeProvider>
-  )
-}
+// src/tui/app.tsx
+App (cwd, skipOnboarding)
+ └─ ThemeProvider (@inkjs/ui)
+     └─ KeypressProvider        // Priority-based single-useInput dispatch
+         └─ DialogManager       // Priority-queued modal dialogs (e.g., exit confirmation)
+             └─ AppProvider     // All state + business logic (contexts: UIState, UIActions)
+                 └─ AppLayout   // View routing reads from UIStateContext
 ```
 
-### 3.2 Theme System (`src/tui/theme.ts`)
+**State & logic layers:**
+- `AppProvider` (app-provider.tsx): owns all state (`useState`/`useRef`), composes custom hooks, provides `UIStateContext` + `UIActionsContext`
+- Custom hooks in `tui/hooks/`: `use-daemon-bridge`, `use-planner-session`, `use-workflow-execution`, `use-global-keypress`, `use-command-dispatch`, `exit-helpers`
+- Components read from context via `useUIState()` / `useUIActions()` — no prop drilling
 
-Uses `@inkjs/ui`'s `extendTheme` to define the CueClaw theme. Components consume colors via the `useComponentTheme()` hook.
+### 3.2 Theme System (`src/tui/theme/`)
 
-- [ ] Define CueClaw semantic colors (based on ANSI color names, terminal auto-adapts to dark/light)
-- [ ] Define theme styles for each custom component
-- [ ] Components use `useComponentTheme()` for colors — no hardcoded color values
+Full theme system with multiple built-in themes and live switching.
 
-```typescript
-// src/tui/theme.ts
-import { extendTheme, defaultTheme } from '@inkjs/ui'
-
-export const cueclawTheme = extendTheme(defaultTheme, {
-  components: {
-    // Plan view
-    PlanView: {
-      styles: {
-        title: () => ({ color: 'cyan', bold: true }),
-        stepPending: () => ({ color: 'gray' }),
-        stepRunning: () => ({ color: 'yellow' }),
-        stepDone: () => ({ color: 'green' }),
-        stepFailed: () => ({ color: 'red' }),
-        border: () => ({ borderColor: 'gray' }),
-      },
-    },
-    // Status dashboard
-    StatusDashboard: {
-      styles: {
-        executing: () => ({ color: 'yellow' }),
-        completed: () => ({ color: 'green' }),
-        failed: () => ({ color: 'red' }),
-        paused: () => ({ color: 'gray', dimColor: true }),
-      },
-    },
-    // Chat
-    Chat: {
-      styles: {
-        userMessage: () => ({ color: 'white', bold: true }),
-        systemMessage: () => ({ color: 'cyan' }),
-        prompt: () => ({ color: 'green' }),
-      },
-    },
-  },
-})
-```
-
-**Usage in components:**
-
-```typescript
-// src/tui/plan-view.tsx
-import { useComponentTheme } from '@inkjs/ui'
-
-// PlanStep is a definition type (no runtime status field).
-// Runtime status comes from StepRun, passed separately as a prop.
-function StepLine({ step, status }: { step: PlanStep; status?: StepStatus }) {
-  const { styles } = useComponentTheme<PlanViewTheme>('PlanView')
-
-  const statusStyle = {
-    pending: styles.stepPending,
-    running: styles.stepRunning,
-    succeeded: styles.stepDone,
-    failed: styles.stepFailed,
-  }[status ?? 'pending'] ?? styles.stepPending
-
-  return <Text {...statusStyle()}>{step.description}</Text>
-}
-```
+- [x] Raw color palette interface (`colors-theme.ts`): foreground, background, accents, border, gradients
+- [x] Semantic color layer (`semantic-colors.ts`): `text.primary`, `status.error`, `border.focused`, etc.
+- [x] Three built-in themes (`themes.ts`): dark (Catppuccin Mocha), light (Catppuccin Latte), dracula
+- [x] Singleton theme manager (`theme-manager.ts`): `setTheme(name)`, `getSemanticColors()`, `getVersion()`
+- [x] Lazy proxy (`index.ts`): always reflects current theme without re-import
+- [x] Color utilities (`color-utils.ts`): `hexToRgb`, `rgbToHex`, `interpolateColor` for gradient blending
+- [x] Live theme switching via `/theme [dark|light|dracula]` command
+- [x] `@inkjs/ui` `extendTheme` still used for the `ThemeProvider` wrapper (`theme.ts`)
 
 **Design decisions:**
 
-- Use only ANSI color names (`cyan`, `green`, `red`, `yellow`, `gray`) — terminal auto-adapts to dark/light mode
-- No hex/rgb — ensures 16-color terminal compatibility
-- Future: `config.yaml`'s `ui.theme` field can support custom themes, overriding `cueclawTheme`
+- Uses hex colors for rich 256-color rendering (modern terminals)
+- `interpolateColor` generates derived colors from theme palette
+- `themeVersion` counter in `UIState` triggers re-renders on theme change
+- Components access colors via the lazy `theme` proxy from `tui/theme/index.ts`
 
 ### 3.3 Title Header
 
@@ -160,14 +87,18 @@ The app displays a simple static title header (not a separate view or component)
 - [x] Rendered via Ink `<Static>` so it stays pinned at the top
 - [x] Hidden during onboarding view
 
-### 3.4 Chat View (`src/tui/chat.tsx`)
+### 3.4 Chat View (decomposed)
 
-- [x] Message history (user messages + CueClaw responses) — no scroll management (Ink limitation)
-- [x] Text input at the bottom with prompt indicator (`> `)
-- [x] On submit: send user text to Planner, show "Thinking..." spinner
-- [x] When Planner returns: auto-switch to Plan view
+`chat.tsx` is now a ~10-line layout shell composing `MainContent` + `Composer`:
+
+- [x] `MainContent` (main-content.tsx): message list with scroll (Ctrl+P/Ctrl+N), streaming text display, `ThinkingIndicator`
+- [x] `Composer` (composer.tsx): rounded-border input box, status bar (`[mode] | daemon`), command hints dropdown
+- [x] `ThinkingIndicator` (thinking-indicator.tsx): animated spinner (`⠋⠙⠹...`) with elapsed seconds, gradient color cycling, Esc-to-cancel
+- [x] `ResettableInput` (resettable-input.tsx): extracted input with reset + history navigation (up/down arrow via `use-input-history.ts`)
+- [x] `Banner` (banner.tsx): ASCII art "CUECLAW" logo with per-line gradient coloring; compact fallback for narrow terminals
+- [x] Per-type message components in `tui/messages/`: user, assistant, assistant-jsx, system, error, warning, plan-ready
+- [x] `HalfLinePaddedBox` (half-line-padded-box.tsx): box with half-line color padding using `▀`/`▄` block characters
 - [ ] ~~Support multi-line input~~ — NOT IMPLEMENTED (Enter always submits)
-- [x] Message formatting: user, system, and assistant messages with distinct styling
 
 ```
 You: Create a workflow that monitors GitHub issues assigned to me
@@ -206,15 +137,15 @@ CueClaw: Generating execution plan...
 
 ### 3.6 Workflow List / Dashboard
 
-No standalone Dashboard view exists. Workflow listing is handled inline in Chat via slash commands:
+Workflow listing is handled inline in Chat via slash commands, with a dedicated Status view and Workflow Detail view:
 
 - [x] `/list` (or `/ls`) renders `WorkflowTable` component inline in chat messages
 - [x] `/status <id>` renders `WorkflowDetail` component inline in chat messages
 - [x] `Ctrl+D` shortcut runs `/list` inline (does not switch views)
 - [x] Color-coded phase indicators in table output
 - [x] Workflow management commands: `/pause`, `/resume`, `/delete`
-
-**Note:** `src/tui/status.tsx` exists as a standalone component but is not wired into app view navigation. The inline slash command approach was chosen for simplicity and consistency with Bot channel interaction patterns.
+- [x] Status view (`status.tsx`) — standalone workflow list with select/stop/delete
+- [x] Workflow Detail view (`workflow-detail-view.tsx`) — comprehensive overview when selecting a workflow from Status: header, trigger config, steps, recent runs, step results for latest run. Enter on a run drills into ExecutionView.
 
 ```
 > /list
@@ -257,19 +188,21 @@ Steps:
 
 ### 3.9 View Navigation
 
-Actual views: `'onboarding' | 'chat' | 'plan' | 'execution' | 'exit_prompt'`
+Actual views: `'onboarding' | 'chat' | 'plan' | 'execution' | 'status' | 'detail'`
 
 | View | Entry | Exit |
 |------|-------|------|
 | **Onboarding** | First run (no config) | Completes setup → Chat |
 | **Chat** | Default view after setup | — (central hub) |
 | **Plan** | Auto-entered when Planner returns | `[Y]` → Execution, `[M]` → Chat, `[N]` → Chat |
-| **Execution** | After confirming a plan | `Enter`/`Q`/`Esc` when complete → Chat |
-| **Exit Prompt** | `Ctrl+C` from any view | Service install or quit |
+| **Execution** | After confirming a plan, or drill-in from Detail | `Enter`/`Q`/`Esc` when complete → Chat (or back to Detail if entered from Detail) |
+| **Status** | `/status` command | Back to Chat |
+| **Detail** | Select workflow from Status (Enter) | `Q`/`Esc` → Status, `Enter` on run → Execution |
 
 - [x] `Ctrl+D` runs `/list` inline in Chat (not a separate view)
-- [x] `Ctrl+C` shows exit prompt with daemon service install option
+- [x] `Ctrl+C` shows exit confirmation via `DialogManager` (no separate view — modals overlay current view)
 - [x] Chat footer shows available hints and daemon status
+- [x] `KeypressProvider` provides priority-based input handling — dialogs at `Critical` priority block underlying handlers
 - [ ] ~~`Tab` cycles between Chat and Dashboard~~ — NOT IMPLEMENTED (no Dashboard view)
 - [ ] ~~`Esc` goes back to previous view~~ — NOT IMPLEMENTED (individual views handle their own exit)
 
@@ -279,11 +212,13 @@ Actual views: `'onboarding' | 'chat' | 'plan' | 'execution' | 'exit_prompt'`
 
 | Constraint | Approach |
 |------------|----------|
-| Terminal compatibility | ANSI color names (16-color), terminal auto-adapts to dark/light mode |
-| Theme system | `@inkjs/ui` ThemeProvider + `extendTheme` + `useComponentTheme` |
-| No hex/rgb | Ensures 16-color terminal compatibility; dark/light handled by terminal |
-| Title header | Simple `<Text>` with version + path, pinned via `<Static>` |
-| Future custom themes | `config.yaml`'s `ui.theme` field can override the default theme |
+| Terminal compatibility | Hex colors for 256-color terminals; graceful degradation |
+| Theme system | `tui/theme/` directory — palette → semantic → manager → lazy proxy |
+| Multiple themes | 3 built-in themes (dark, light, dracula) with live switching via `/theme` |
+| Title header | ASCII art banner with gradient coloring via `banner.tsx` |
+| Input handling | Single `useInput` in `KeypressProvider`, priority-based dispatch to handlers |
+| Modals/Dialogs | `DialogManager` with priority queue, renders at `Critical` priority |
+| State management | Context providers (`UIStateContext` + `UIActionsContext`) instead of prop drilling |
 
 ---
 
