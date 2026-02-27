@@ -48,7 +48,7 @@ CueClaw uses the Claude Agent SDK as its fixed execution engine.
 ## Design Principles
 
 1. **Skills-over-Features** — Keep the core minimal. No built-in service-specific logic. Need GitHub capabilities? Write a skill in `.claude/skills/`, or let the agent infer.
-2. **Container-Isolated Execution** — Workflow steps run in Docker containers (future). OS-level isolation beats app-level permission checks.
+2. **Container-Isolated Execution** — Workflow steps run in Docker containers by default. If Docker is unavailable, gracefully falls back to local execution with a warning. OS-level isolation beats app-level permission checks.
 3. **Single-Process Architecture** — The daemon is one Node.js process. No microservices. Keep it understandable.
 4. **Claude Agent SDK Direct Calls** — Use `@anthropic-ai/claude-agent-sdk`'s `query()` API with streaming output, session management, and MCP server injection.
 
@@ -140,10 +140,10 @@ cueclaw/
 ├── config.yaml                      # Config (Claude API, Bot tokens, etc.)
 ├── db/
 │   └── cueclaw.db                   # SQLite
-├── logs/
-│   ├── daemon.log                   # Daemon main process log
+├── logs/                            # Created by initLogger() at startup
+│   ├── daemon.log                   # All process logs (appended via pino multistream)
 │   └── executions/
-│       └── wf_abc123_2026-02-22.log
+│       └── wf_abc123_2026-02-22.log # Per-workflow execution logs
 ├── ipc/
 │   └── {workflow_id}/
 │       └── {step_id}/

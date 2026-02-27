@@ -32,11 +32,12 @@ telegram:
     - "your_telegram_id"
 
 logging:
-  level: info
-  dir: ~/.cueclaw/logs
+  level: info                    # debug | info | warn | error (also overridden by LOG_LEVEL env var)
+  dir: ~/.cueclaw/logs           # File logging: daemon.log + executions/{workflowId}_{date}.log
 
 container:
-  enabled: true                    # false = local execution with PreToolUse hooks only
+  enabled: true                    # Default: true. Set false = local execution with PreToolUse hooks only
+                                   # If Docker is unavailable at runtime, falls back to local execution with a warning
   image: cueclaw-agent:latest
   timeout: 1800000                 # 30 min hard timeout per step
   max_output_size: 10485760        # 10MB output cap

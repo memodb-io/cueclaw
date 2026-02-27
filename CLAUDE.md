@@ -14,7 +14,9 @@ MVP implemented (Phases 0-6) with multi-turn planner, TUI slash commands, and da
 - **Channel**: Unified interface for TUI, WhatsApp, Telegram — all share identical capabilities
 - **Daemon Bridge**: Abstraction between TUI and backend — detects external system service or runs in-process
 - **Input References**: `$steps.{id}.output` (step results) and `$trigger_data` (trigger payload), resolved at execution time
+- **Container Execution**: Enabled by default — falls back to local execution with a warning if Docker is unavailable
 - **Session**: Per-step (not per-run) — steps don't share session context to avoid pollution
+- **File Logging**: `initLogger()` writes to `~/.cueclaw/logs/daemon.log` (all processes) and `executions/` subdir (per-workflow); composes with TUI in-memory stream via pino multistream
 
 ## Architecture
 
