@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid'
 import { validateDAG } from './workflow.js'
 import { createAnthropicClient } from './anthropic-client.js'
 import { PlannerError } from './types.js'
-import type { Workflow, PlannerOutput } from './types.js'
+import type { Workflow, PlannerOutput, ChannelContext } from './types.js'
 import type { CueclawConfig } from './config.js'
 import { getConfiguredSecretKeys } from './env.js'
 import { logger } from './logger.js'
@@ -189,8 +189,24 @@ export function parsePlannerToolResponse(
 
 // ─── System Prompt ───
 
-export function buildPlannerSystemPrompt(config: CueclawConfig): string {
+export function buildPlannerSystemPrompt(config: CueclawConfig, channelContext?: ChannelContext): string {
   const identity = config.identity?.name ? `\nUser identity: ${config.identity.name}` : ''
+
+  let channelSection: string
+  if (channelContext && channelContext.channel !== 'tui') {
+    channelSection = `\n## Channel Context
+
+The user is requesting this workflow via **${channelContext.channel}**.
+- Chat ID: ${channelContext.chatJid}
+- Sender: ${channelContext.sender}
+
+When the workflow needs to send notifications or messages back to the user, use the chat ID and channel above as the recipient. Do not ask the user for recipient information — you already have it.`
+  } else {
+    channelSection = `\n## Channel Context
+
+The user is using the TUI (terminal interface). No chat recipient is available.
+If the workflow needs to send notifications or messages to someone, the step description must require explicit recipient input (e.g., email address, phone number, chat ID) — do not assume any default recipient.`
+  }
 
   return `You are CueClaw Planner. Convert user's natural language into a structured Workflow.
 
@@ -228,7 +244,7 @@ ${(() => {
 If a workflow needs credentials not listed above, use the set_secret tool to store them after the user provides the value. Never invent or guess secret values.
 
 ## User Identity
-${identity}`
+${identity}${channelSection}`
 }
 
 // ─── Generate Plan ───
@@ -236,6 +252,7 @@ ${identity}`
 export async function generatePlan(
   userDescription: string,
   config: CueclawConfig,
+  channelContext?: ChannelContext,
 ): Promise<Workflow> {
   const anthropic = createAnthropicClient(config)
   const MAX_RETRIES = 2
@@ -253,7 +270,7 @@ export async function generatePlan(
       response = await anthropic.messages.create({
         model: config.claude.planner.model,
         max_tokens: 4096,
-        system: buildPlannerSystemPrompt(config),
+        system: buildPlannerSystemPrompt(config, channelContext),
         messages: [{ role: 'user', content: prompt }],
         tools: [plannerTool],
         tool_choice: { type: 'tool', name: 'create_workflow' },
@@ -311,7 +328,7 @@ export async function generatePlan(
     const now = new Date().toISOString()
     const workflow = {
       ...parseResult.data,
-      schema_version: '1.0',
+      schema_version: '1.0' as const,
       id: `wf_${nanoid()}`,
       phase: 'awaiting_confirmation' as const,
       created_at: now,
@@ -330,6 +347,7 @@ export async function modifyPlan(
   originalWorkflow: Workflow,
   modificationDescription: string,
   config: CueclawConfig,
+  channelContext?: ChannelContext,
 ): Promise<Workflow> {
   const plannerOutput: PlannerOutput = {
     name: originalWorkflow.name,
@@ -350,7 +368,7 @@ ${modificationDescription}
 Preserve unmodified steps' IDs, descriptions, and dependencies — only change what the user specified.
 Return the complete modified workflow using the create_workflow tool.`
 
-  const result = await generatePlan(combinedPrompt, config)
+  const result = await generatePlan(combinedPrompt, config, channelContext)
   logger.info({ workflowId: originalWorkflow.id }, 'Plan modified')
   // Keep original ID but update timestamp
   return {
@@ -371,7 +389,7 @@ export function confirmPlan(workflow: Workflow): Workflow {
   logger.info({ workflowId: workflow.id, nextPhase }, 'Plan confirmed')
   return {
     ...workflow,
-    phase: nextPhase,
+    phase: nextPhase as Workflow['phase'],
     updated_at: new Date().toISOString(),
   }
 }

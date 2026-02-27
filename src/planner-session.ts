@@ -9,7 +9,7 @@ import {
   parsePlannerToolResponse,
 } from './planner.js'
 import { writeEnvVar, isDev } from './env.js'
-import type { Workflow } from './types.js'
+import type { Workflow, ChannelContext } from './types.js'
 import type { CueclawConfig } from './config.js'
 import { logger } from './logger.js'
 
@@ -38,6 +38,7 @@ export async function startPlannerSession(
   userMessage: string,
   config: CueclawConfig,
   callbacks?: StreamCallbacks,
+  channelContext?: ChannelContext,
 ): Promise<{ session: PlannerSession; turn: PlannerTurn }> {
   const session: PlannerSession = {
     id: `ps_${nanoid()}`,
@@ -47,7 +48,7 @@ export async function startPlannerSession(
   }
 
   logger.info({ sessionId: session.id }, 'Planner session started')
-  const turn = await runPlannerTurn(session, config, callbacks)
+  const turn = await runPlannerTurn(session, config, callbacks, channelContext)
   return { session, turn }
 }
 
@@ -56,10 +57,11 @@ export async function continuePlannerSession(
   userMessage: string,
   config: CueclawConfig,
   callbacks?: StreamCallbacks,
+  channelContext?: ChannelContext,
 ): Promise<{ session: PlannerSession; turn: PlannerTurn }> {
   session.messages.push({ role: 'user', content: userMessage })
   logger.debug({ sessionId: session.id, turnCount: session.messages.length }, 'Planner session continued')
-  const turn = await runPlannerTurn(session, config, callbacks)
+  const turn = await runPlannerTurn(session, config, callbacks, channelContext)
   return { session, turn }
 }
 
@@ -74,9 +76,10 @@ async function runPlannerTurn(
   session: PlannerSession,
   config: CueclawConfig,
   callbacks?: StreamCallbacks,
+  channelContext?: ChannelContext,
 ): Promise<PlannerTurn> {
   const anthropic = createAnthropicClient(config)
-  const systemPrompt = buildPlannerSystemPrompt(config) + `
+  const systemPrompt = buildPlannerSystemPrompt(config, channelContext) + `
 
 ## Conversation Mode
 
@@ -176,7 +179,7 @@ Guidelines:
       }
 
       // Continue — the model may still need to ask more questions or create the workflow
-      return runPlannerTurn(session, config, callbacks)
+      return runPlannerTurn(session, config, callbacks, channelContext)
     }
 
     case 'plan': {
