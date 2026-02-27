@@ -1,5 +1,11 @@
 # cueclaw
 
+## 0.1.3
+
+### Patch Changes
+
+- 75103ee: Fix release workflow that was accidentally removed when merging release.yml into ci.yml
+
 ## 0.1.2
 
 ### Patch Changes
