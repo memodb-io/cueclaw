@@ -17,6 +17,7 @@ function createMockChannel(name: string): Channel & { sentMessages: Array<{ jid:
     disconnect: vi.fn(async () => {}),
     sendMessage: vi.fn(async (jid: string, text: string) => {
       sentMessages.push({ jid, text })
+      return `msg_${sentMessages.length}`
     }),
     sendConfirmation: vi.fn(async () => {}),
     isConnected: () => true,
@@ -171,6 +172,7 @@ describe('MessageRouter', () => {
       routerAny.pendingConfirmations.set('user1', {
         workflowId: 'wf_test',
         workflow,
+        channelContext: { channel: 'test', chatJid: 'user1', sender: 'user1' },
         expiresAt: Date.now() - 1000, // Already expired
       })
 

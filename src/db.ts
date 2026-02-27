@@ -144,6 +144,25 @@ export function insertWorkflow(db: Database.Database, workflow: Workflow): void 
   )
 }
 
+export function upsertWorkflow(db: Database.Database, workflow: Workflow): void {
+  db.prepare(`
+    INSERT OR REPLACE INTO workflows (id, name, description, trigger_json, steps_json, failure_policy_json, phase, schema_version, metadata_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    workflow.id,
+    workflow.name,
+    workflow.description,
+    JSON.stringify(workflow.trigger),
+    JSON.stringify(workflow.steps),
+    JSON.stringify(workflow.failure_policy),
+    workflow.phase,
+    workflow.schema_version,
+    workflow.metadata ? JSON.stringify(workflow.metadata) : null,
+    workflow.created_at,
+    workflow.updated_at,
+  )
+}
+
 export function getWorkflow(db: Database.Database, id: string): Workflow | undefined {
   const row = db.prepare('SELECT * FROM workflows WHERE id = ?').get(id) as WorkflowRow | undefined
   return row ? rowToWorkflow(row) : undefined

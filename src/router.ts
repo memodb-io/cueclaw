@@ -1,10 +1,10 @@
 import type Database from 'better-sqlite3'
-import type { Channel, NewMessage, Workflow } from './types.js'
+import type { Channel, NewMessage, Workflow, ChannelContext } from './types.js'
 import { generatePlan, modifyPlan, confirmPlan, rejectPlan } from './planner.js'
 import { executeWorkflow } from './executor.js'
 import { createAnthropicClient } from './anthropic-client.js'
 import type { CueclawConfig } from './config.js'
-import { listWorkflows, getWorkflow, updateWorkflowPhase, insertWorkflow } from './db.js'
+import { listWorkflows, getWorkflow, updateWorkflowPhase, insertWorkflow, upsertWorkflow } from './db.js'
 import { logger } from './logger.js'
 
 const CONFIRMATION_TIMEOUT = 10 * 60_000
@@ -16,6 +16,7 @@ interface PendingConfirmation {
   workflowId: string
   workflow: Workflow
   expiresAt: number
+  channelContext: ChannelContext
 }
 
 export class MessageRouter {
@@ -72,6 +73,7 @@ export class MessageRouter {
     }
 
     const text = typeof message === 'string' ? message : message.text
+    const sender = typeof message === 'string' ? undefined : message.sender
     logger.debug({ channelName, chatJid }, 'Inbound message received')
 
     // Rate limiting
@@ -82,7 +84,7 @@ export class MessageRouter {
     }
 
     if (text.startsWith('/') || text.startsWith('!')) {
-      await this.handleCommand(channel, chatJid, text)
+      await this.handleCommand(channel, chatJid, text, sender)
     } else if (this.pendingConfirmations.has(chatJid)) {
       const pending = this.pendingConfirmations.get(chatJid)!
       if (Date.now() > pending.expiresAt) {
@@ -92,11 +94,11 @@ export class MessageRouter {
         await this.handleConfirmation(channel, chatJid, text)
       }
     } else {
-      await this.classifyAndRoute(channel, chatJid, text)
+      await this.classifyAndRoute(channel, chatJid, text, sender)
     }
   }
 
-  private async handleCommand(channel: Channel, chatJid: string, text: string): Promise<void> {
+  private async handleCommand(channel: Channel, chatJid: string, text: string, sender?: string): Promise<void> {
     const parts = text.slice(1).split(/\s+/)
     const command = parts[0]?.toLowerCase()
     const args = parts.slice(1).join(' ')
@@ -104,7 +106,7 @@ export class MessageRouter {
     switch (command) {
       case 'new':
         if (args) {
-          await this.handleNewWorkflow(channel, chatJid, args)
+          await this.handleNewWorkflow(channel, chatJid, args, sender)
         } else {
           await channel.sendMessage(chatJid, 'Send a workflow description to create a new workflow.')
         }
@@ -180,7 +182,7 @@ export class MessageRouter {
     await this.handleInbound(channelName, chatId, { text: mappedText, sender: chatId })
   }
 
-  private async classifyAndRoute(channel: Channel, chatJid: string, text: string): Promise<void> {
+  private async classifyAndRoute(channel: Channel, chatJid: string, text: string, sender?: string): Promise<void> {
     try {
       const client = createAnthropicClient(this.config)
       const response = await client.messages.create({
@@ -214,26 +216,37 @@ export class MessageRouter {
         const input = toolUse.input as { message?: string }
         await channel.sendMessage(chatJid, input.message ?? "I'm CueClaw, a workflow automation tool. Send me a task description and I'll create a plan for you!")
       } else {
-        await this.handleNewWorkflow(channel, chatJid, text)
+        await this.handleNewWorkflow(channel, chatJid, text, sender)
       }
     } catch (err) {
       logger.error({ err, chatJid }, 'Classification failed, falling back to workflow')
-      await this.handleNewWorkflow(channel, chatJid, text)
+      await this.handleNewWorkflow(channel, chatJid, text, sender)
     }
   }
 
-  private async handleNewWorkflow(channel: Channel, chatJid: string, text: string): Promise<void> {
-    await channel.sendMessage(chatJid, 'Generating execution plan...')
+  private async handleNewWorkflow(channel: Channel, chatJid: string, text: string, sender?: string): Promise<void> {
+    const channelContext: ChannelContext = {
+      channel: channel.name as ChannelContext['channel'],
+      chatJid,
+      sender,
+    }
+    const statusMsgId = await channel.sendMessage(chatJid, 'Generating execution plan...')
     channel.setTyping?.(chatJid, true)
 
     try {
-      const workflow = await generatePlan(text, this.config)
+      const workflow = await generatePlan(text, this.config, channelContext)
       insertWorkflow(this.db, workflow)
       channel.setTyping?.(chatJid, false)
+
+      // Update the status message to indicate completion, then show confirmation
+      if (statusMsgId && channel.editMessage) {
+        await channel.editMessage(chatJid, statusMsgId, '✅ Execution plan generated.')
+      }
 
       this.pendingConfirmations.set(chatJid, {
         workflowId: workflow.id,
         workflow,
+        channelContext,
         expiresAt: Date.now() + CONFIRMATION_TIMEOUT,
       })
 
@@ -241,7 +254,12 @@ export class MessageRouter {
     } catch (err) {
       channel.setTyping?.(chatJid, false)
       const msg = err instanceof Error ? err.message : String(err)
-      await channel.sendMessage(chatJid, `Failed to generate plan: ${msg}`)
+      const failMsg = `❌ Failed to generate plan: ${msg}`
+      if (statusMsgId && channel.editMessage) {
+        await channel.editMessage(chatJid, statusMsgId, failMsg)
+      } else {
+        await channel.sendMessage(chatJid, failMsg)
+      }
       logger.error({ err, chatJid }, 'Plan generation failed')
     }
   }
@@ -256,7 +274,8 @@ export class MessageRouter {
       this.pendingConfirmations.delete(chatJid)
       const confirmed = confirmPlan(pending.workflow)
       logger.info({ workflowId: confirmed.id, chatJid }, 'Workflow confirmed via channel')
-      await channel.sendMessage(chatJid, `Workflow activated: ${confirmed.name} (${confirmed.id})`)
+
+      const statusMsgId = await channel.sendMessage(chatJid, `⏳ Deploying workflow "${confirmed.name}"...`)
 
       channel.setTyping?.(chatJid, true)
       try {
@@ -265,18 +284,36 @@ export class MessageRouter {
           triggerData: null,
           db: this.db,
           cwd: this.cwd,
-          onProgress: async (stepId, msg) => {
-            if (typeof msg === 'object' && msg?.type === 'step_complete') {
-              await channel.sendMessage(chatJid, `Step completed: ${stepId}`)
-            }
-          },
         })
         channel.setTyping?.(chatJid, false)
-        await channel.sendMessage(chatJid, `Workflow complete! Status: ${result.status}`)
+        if (result.status === 'failed') {
+          const failedSteps = [...result.results.entries()]
+            .filter(([, r]) => r.status === 'failed' && r.error)
+            .map(([id, r]) => `${id}: ${r.error}`)
+          const errorDetail = failedSteps.length > 0 ? `\n${failedSteps.join('\n')}` : ''
+          const failMsg = `❌ Deploy failed: ${confirmed.name}${errorDetail}`
+          if (statusMsgId && channel.editMessage) {
+            await channel.editMessage(chatJid, statusMsgId, failMsg)
+          } else {
+            await channel.sendMessage(chatJid, failMsg)
+          }
+        } else {
+          const successMsg = `✅ Deployed successfully: ${confirmed.name}`
+          if (statusMsgId && channel.editMessage) {
+            await channel.editMessage(chatJid, statusMsgId, successMsg)
+          } else {
+            await channel.sendMessage(chatJid, successMsg)
+          }
+        }
       } catch (err) {
         channel.setTyping?.(chatJid, false)
         const msg = err instanceof Error ? err.message : String(err)
-        await channel.sendMessage(chatJid, `Workflow failed: ${msg}`)
+        const failMsg = `❌ Deploy failed: ${confirmed.name}\n${msg}`
+        if (statusMsgId && channel.editMessage) {
+          await channel.editMessage(chatJid, statusMsgId, failMsg)
+        } else {
+          await channel.sendMessage(chatJid, failMsg)
+        }
       }
     } else if (['no', 'n', 'cancel', '3'].includes(lower)) {
       this.pendingConfirmations.delete(chatJid)
@@ -293,14 +330,15 @@ export class MessageRouter {
       channel.setTyping?.(chatJid, true)
 
       try {
-        const modified = await modifyPlan(pending.workflow, text, this.config)
+        const modified = await modifyPlan(pending.workflow, text, this.config, pending.channelContext)
         logger.info({ workflowId: modified.id, chatJid }, 'Workflow modified via channel')
-        insertWorkflow(this.db, modified)
+        upsertWorkflow(this.db, modified)
         channel.setTyping?.(chatJid, false)
 
         this.pendingConfirmations.set(chatJid, {
           workflowId: modified.id,
           workflow: modified,
+          channelContext: pending.channelContext,
           expiresAt: Date.now() + CONFIRMATION_TIMEOUT,
         })
 

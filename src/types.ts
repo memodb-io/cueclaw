@@ -87,12 +87,21 @@ export type TriggerConfig =
   | { type: 'cron'; expression: string; timezone?: string }
   | { type: 'manual' }
 
+// ─── Channel Context ───
+
+export interface ChannelContext {
+  channel: 'tui' | 'telegram' | 'whatsapp'
+  chatJid?: string   // bot channels only
+  sender?: string    // bot channels only
+}
+
 // ─── Channel Interface ───
 
 export interface Channel {
   name: string
   connect(): Promise<void>
-  sendMessage(jid: string, text: string): Promise<void>
+  sendMessage(jid: string, text: string): Promise<string>
+  editMessage?(jid: string, messageId: string, text: string): Promise<void>
   sendConfirmation(jid: string, workflow: Workflow): Promise<void>
   isConnected(): boolean
   ownsJid(jid: string): boolean

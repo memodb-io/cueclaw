@@ -30,6 +30,25 @@ export class TelegramChannel implements Channel {
   }
 
   async connect(): Promise<void> {
+    this.bot.command('start', async (ctx) => {
+      const jid = String(ctx.chat.id)
+      if (!this.isAllowed(jid)) return
+
+      await ctx.reply(
+        [
+          '👋 Hi! I\'m CueClaw — your workflow automation assistant.',
+          '',
+          'Tell me what you want to automate in plain language, and I\'ll turn it into a structured workflow with steps, triggers, and scheduling.',
+          '',
+          'For example:',
+          '• "Every morning at 9am, check Hacker News for top AI posts and summarize them"',
+          '• "Monitor my GitHub repo for new issues and notify me"',
+          '',
+          'Just type your request and I\'ll help you set it up!',
+        ].join('\n'),
+      )
+    })
+
     this.bot.on('message:text', (ctx) => {
       const jid = String(ctx.chat.id)
       if (!this.isAllowed(jid)) return
@@ -70,11 +89,18 @@ export class TelegramChannel implements Channel {
     this.connected = false
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
+  async sendMessage(jid: string, text: string): Promise<string> {
     const chunks = chunkMessage(text)
+    let lastMessageId = ''
     for (const chunk of chunks) {
-      await this.bot.api.sendMessage(Number(jid), chunk)
+      const sent = await this.bot.api.sendMessage(Number(jid), chunk)
+      lastMessageId = String(sent.message_id)
     }
+    return lastMessageId
+  }
+
+  async editMessage(jid: string, messageId: string, text: string): Promise<void> {
+    await this.bot.api.editMessageText(Number(jid), Number(messageId), text)
   }
 
   async sendConfirmation(jid: string, workflow: Workflow): Promise<void> {

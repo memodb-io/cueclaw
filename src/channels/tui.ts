@@ -21,8 +21,9 @@ export class TuiChannel implements Channel {
     this.sendFn = null
   }
 
-  async sendMessage(_jid: string, text: string): Promise<void> {
+  async sendMessage(_jid: string, text: string): Promise<string> {
     this.sendFn?.(text)
+    return ''
   }
 
   async sendConfirmation(_jid: string, workflow: Workflow): Promise<void> {

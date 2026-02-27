@@ -78,9 +78,18 @@ export class WhatsAppChannel implements Channel {
     }
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
+  async sendMessage(jid: string, text: string): Promise<string> {
     if (!this.sock) throw new Error('WhatsApp not connected')
-    await this.sock.sendMessage(jid, { text })
+    const sent = await this.sock.sendMessage(jid, { text })
+    return sent?.key?.id ?? ''
+  }
+
+  async editMessage(jid: string, messageId: string, text: string): Promise<void> {
+    if (!this.sock) throw new Error('WhatsApp not connected')
+    await this.sock.sendMessage(jid, {
+      text,
+      edit: { remoteJid: jid, id: messageId, fromMe: true },
+    })
   }
 
   async sendConfirmation(jid: string, workflow: Workflow): Promise<void> {

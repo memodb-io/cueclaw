@@ -2,7 +2,7 @@ import { checkEnvironment } from './setup-environment.js'
 import { validateAuth } from './setup-auth.js'
 import { buildContainer, checkContainerImage } from './setup-container.js'
 import { runSmokeTest } from './setup-verify.js'
-import type { CueclawConfig } from './config.js'
+import { getDefaultImage, type CueclawConfig } from './config.js'
 import { logger } from './logger.js'
 
 export async function runSetup(config: CueclawConfig, projectRoot: string): Promise<void> {
@@ -40,7 +40,7 @@ export async function runSetup(config: CueclawConfig, projectRoot: string): Prom
   console.log('  API key: valid')
 
   // 3. Build container image
-  const imageName = config.container?.image ?? 'cueclaw-agent:latest'
+  const imageName = config.container?.image ?? getDefaultImage()
   if (!checkContainerImage(imageName)) {
     console.log('\nBuilding container image...')
     const build = buildContainer(projectRoot)

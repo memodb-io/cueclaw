@@ -102,6 +102,7 @@ function installLaunchd(): { success: boolean; error?: string } {
     <string>${cliPath}</string>
     <string>daemon</string>
     <string>start</string>
+    <string>--foreground</string>
   </array>
   <key>KeepAlive</key>
   <true/>
@@ -154,7 +155,7 @@ Description=CueClaw Daemon
 After=network.target
 
 [Service]
-ExecStart=${nodePath} ${cliPath} daemon start
+ExecStart=${nodePath} ${cliPath} daemon start --foreground
 Restart=always
 RestartSec=5
 
