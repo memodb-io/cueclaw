@@ -260,6 +260,7 @@ export async function generatePlan(
       })
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
+      logger.error({ err, attempt }, 'Planner API request failed')
       throw new PlannerError(
         `API request failed: ${detail}. Check your API key and base_url in ~/.cueclaw/config.yaml`
       )
@@ -290,6 +291,7 @@ export async function generatePlan(
     if (!parseResult.success) {
       const errMsg = parseResult.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')
       if (attempt < MAX_RETRIES) {
+        logger.warn({ attempt, errors: errMsg }, 'Planner output validation failed, retrying')
         retryContext = `[System] Previous plan had validation issues:\n${errMsg}\nPlease fix and try again.`
         continue
       }
@@ -299,6 +301,7 @@ export async function generatePlan(
     const dagErrors = validateDAG(parseResult.data.steps)
     if (dagErrors.length > 0) {
       if (attempt < MAX_RETRIES) {
+        logger.warn({ attempt, dagErrors }, 'DAG validation failed, retrying')
         retryContext = `[System] DAG dependency issues:\n${dagErrors.join('\n')}\nPlease fix the step dependencies.`
         continue
       }
@@ -306,14 +309,16 @@ export async function generatePlan(
     }
 
     const now = new Date().toISOString()
-    return {
+    const workflow = {
       ...parseResult.data,
       schema_version: '1.0',
       id: `wf_${nanoid()}`,
-      phase: 'awaiting_confirmation',
+      phase: 'awaiting_confirmation' as const,
       created_at: now,
       updated_at: now,
     }
+    logger.info({ name: workflow.name, stepCount: workflow.steps.length, workflowId: workflow.id }, 'Plan generated successfully')
+    return workflow
   }
 
   throw new PlannerError('Failed to generate valid plan after retries')
@@ -346,6 +351,7 @@ Preserve unmodified steps' IDs, descriptions, and dependencies — only change w
 Return the complete modified workflow using the create_workflow tool.`
 
   const result = await generatePlan(combinedPrompt, config)
+  logger.info({ workflowId: originalWorkflow.id }, 'Plan modified')
   // Keep original ID but update timestamp
   return {
     ...result,
@@ -362,6 +368,7 @@ export function confirmPlan(workflow: Workflow): Workflow {
   }
 
   const nextPhase = workflow.trigger.type === 'manual' ? 'executing' : 'active'
+  logger.info({ workflowId: workflow.id, nextPhase }, 'Plan confirmed')
   return {
     ...workflow,
     phase: nextPhase,
@@ -370,6 +377,7 @@ export function confirmPlan(workflow: Workflow): Workflow {
 }
 
 export function rejectPlan(workflow: Workflow): Workflow {
+  logger.info({ workflowId: workflow.id }, 'Plan rejected')
   return {
     ...workflow,
     phase: 'planning',

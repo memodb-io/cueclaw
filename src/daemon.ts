@@ -13,6 +13,7 @@ export async function startDaemon(): Promise<void> {
   const config = loadConfig()
   const db = initDb()
   const cwd = process.cwd()
+  logger.debug({ cwd }, 'Daemon initializing')
 
   const router = new MessageRouter(db, config, cwd)
 
@@ -54,6 +55,7 @@ export async function startDaemon(): Promise<void> {
   await recoverRunningWorkflows(db, router)
 
   // Start trigger loop
+  logger.debug('Starting trigger loop and router')
   const maxConcurrent = 5
   const triggerLoop = new TriggerLoop(db, router, cwd, maxConcurrent)
   triggerLoop.start()
@@ -92,6 +94,7 @@ async function recoverRunningWorkflows(
   logger.warn({ count: interruptedRuns.length }, 'Recovering interrupted workflow runs')
 
   for (const run of interruptedRuns) {
+    logger.warn({ runId: run.id, workflowId: run.workflow_id }, 'Recovering interrupted run')
     db.prepare(
       "UPDATE workflow_runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?"
     ).run('Daemon restarted during execution', new Date().toISOString(), run.id)

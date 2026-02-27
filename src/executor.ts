@@ -130,6 +130,7 @@ async function executeStepOnce(
     const session = createSession(db, stepRunId, result.sessionId)
     updateSessionSdkId(db, session.id, result.sessionId)
     deactivateSession(db, session.id)
+    execLogger?.debug({ stepId: step.id, sessionId: session.id }, 'Session stored')
   }
 
   // Update step run in DB
@@ -204,6 +205,7 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
   try {
     while (remaining.size > 0) {
       if (signal?.aborted) {
+        execLogger.warn({ workflowId: workflow.id, runId, remainingSteps: remaining.size }, 'Execution aborted via signal')
         for (const id of remaining) {
           completed.set(id, { status: 'skipped', error: 'Aborted' })
           onProgress?.(id, { status: 'skipped' })
@@ -220,6 +222,7 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
       })
 
       if (ready.length === 0) {
+        execLogger.error({ workflowId: workflow.id, runId, remaining: [...remaining] }, 'Deadlock detected')
         throw new ExecutorError('Deadlock: no ready steps but remaining steps exist')
       }
 
@@ -234,6 +237,7 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
         )
 
         if (depsFailed && workflow.failure_policy.on_step_failure !== 'ask_user') {
+          execLogger.debug({ stepId: id, reason: 'dependency_failed' }, 'Step skipped')
           remaining.delete(id)
           completed.set(id, { status: 'skipped' })
           // Record skipped step in DB
@@ -245,6 +249,7 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
         // Check if resolved inputs have skip markers
         const resolvedInputs = resolveInputs(step.inputs, completed, triggerData)
         if (hasSkipMarker(resolvedInputs)) {
+          execLogger.debug({ stepId: id, reason: 'skip_marker' }, 'Step skipped')
           remaining.delete(id)
           completed.set(id, { status: 'skipped' })
           const skipRunId = `sr_${nanoid()}`
@@ -277,6 +282,7 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
           const policy = workflow.failure_policy.on_step_failure
 
           if (policy === 'stop') {
+            execLogger.warn({ stepId, policy: 'stop' }, 'Stop policy triggered, skipping remaining steps')
             for (const remainingId of remaining) {
               completed.set(remainingId, { status: 'skipped' })
               const skipRunId = `sr_${nanoid()}`
@@ -289,6 +295,7 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
 
           if (policy === 'ask_user' && onStepFailure) {
             const decision = await onStepFailure(stepMap.get(stepId)!, result.error ?? 'Unknown error')
+            execLogger.info({ stepId, decision }, 'ask_user decision received')
             if (decision === 'stop') {
               for (const remainingId of remaining) {
                 completed.set(remainingId, { status: 'skipped' })

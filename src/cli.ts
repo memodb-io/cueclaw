@@ -113,6 +113,7 @@ configCmd.command('set')
         target[parts[parts.length - 1]!] = parsed
 
         writeFileSync(configPath, stringifyYaml(doc), 'utf-8')
+        logger.info({ key, value: parsed }, 'Config value updated')
         console.log(`Set ${key} = ${JSON.stringify(parsed)}`)
       }
     } catch (err) {
@@ -132,6 +133,7 @@ program.command('new')
       const { generatePlan, confirmPlan } = await import('./planner.js')
       const { executeWorkflow } = await import('./executor.js')
 
+      logger.info({ description: description.slice(0, 100) }, 'Starting plan generation')
       console.log('Planning workflow...')
       const workflow = await generatePlan(description, config)
 
@@ -150,6 +152,7 @@ program.command('new')
       rl.close()
 
       if (answer.toLowerCase() !== 'y') {
+        logger.info({ workflowId: workflow.id }, 'User cancelled workflow confirmation')
         console.log('Cancelled.')
         return
       }
@@ -159,8 +162,10 @@ program.command('new')
       insertWorkflow(db, workflow)
       const confirmed = confirmPlan(workflow)
       updateWorkflowPhase(db, confirmed.id, confirmed.phase)
+      logger.info({ workflowId: confirmed.id, phase: confirmed.phase }, 'Workflow confirmed')
 
       if (confirmed.phase === 'executing') {
+        logger.info({ workflowId: confirmed.id }, 'Starting workflow execution')
         console.log('\nExecuting workflow...')
         const result = await executeWorkflow({
           workflow: confirmed,
@@ -171,6 +176,7 @@ program.command('new')
             if (msg?.status) console.log(`  [${stepId}] ${msg.status}`)
           },
         })
+        logger.info({ workflowId: confirmed.id, runId: result.runId, status: result.status }, 'Workflow execution finished')
         console.log(`\nWorkflow ${result.status}. Run ID: ${result.runId}`)
       } else {
         console.log(`\nWorkflow saved as "${confirmed.phase}". ID: ${confirmed.id}`)
@@ -230,6 +236,7 @@ program.command('status')
 
       const wf = getWorkflow(db, workflowId)
       if (!wf) {
+        logger.warn({ workflowId }, 'Status check: workflow not found')
         console.error(`Workflow not found: ${workflowId}`)
         db.close()
         process.exit(1)
@@ -282,16 +289,19 @@ program.command('pause')
       const db = initDb()
       const wf = getWorkflow(db, workflowId)
       if (!wf) {
+        logger.warn({ workflowId }, 'Pause failed: workflow not found')
         console.error(`Workflow not found: ${workflowId}`)
         db.close()
         process.exit(1)
       }
       if (wf.phase !== 'active') {
+        logger.warn({ workflowId, phase: wf.phase }, 'Pause failed: invalid phase')
         console.error(`Cannot pause workflow in phase "${wf.phase}" (must be "active")`)
         db.close()
         process.exit(1)
       }
       updateWorkflowPhase(db, workflowId, 'paused')
+      logger.info({ workflowId }, 'Workflow paused')
       console.log(`Paused workflow "${wf.name}" (${workflowId})`)
       db.close()
     } catch (err) {
@@ -309,11 +319,13 @@ program.command('resume')
       const db = initDb()
       const wf = getWorkflow(db, workflowId)
       if (!wf) {
+        logger.warn({ workflowId }, 'Resume failed: workflow not found')
         console.error(`Workflow not found: ${workflowId}`)
         db.close()
         process.exit(1)
       }
       if (wf.phase !== 'paused') {
+        logger.warn({ workflowId, phase: wf.phase }, 'Resume failed: invalid phase')
         console.error(`Cannot resume workflow in phase "${wf.phase}" (must be "paused")`)
         db.close()
         process.exit(1)
@@ -321,6 +333,7 @@ program.command('resume')
 
       if (wf.trigger.type === 'manual') {
         updateWorkflowPhase(db, workflowId, 'executing')
+        logger.info({ workflowId }, 'Resuming workflow execution')
         console.log(`Executing workflow "${wf.name}"...`)
         const { executeWorkflow } = await import('./executor.js')
         const result = await executeWorkflow({
@@ -332,9 +345,11 @@ program.command('resume')
             if (msg?.status) console.log(`  [${stepId}] ${msg.status}`)
           },
         })
+        logger.info({ workflowId, runId: result.runId, status: result.status }, 'Resume execution finished')
         console.log(`Workflow ${result.status}. Run ID: ${result.runId}`)
       } else {
         updateWorkflowPhase(db, workflowId, 'active')
+        logger.info({ workflowId }, 'Workflow resumed (trigger-based)')
         console.log(`Resumed workflow "${wf.name}" (${workflowId})`)
       }
 
@@ -354,11 +369,13 @@ program.command('delete')
       const db = initDb()
       const wf = getWorkflow(db, workflowId)
       if (!wf) {
+        logger.warn({ workflowId }, 'Delete failed: workflow not found')
         console.error(`Workflow not found: ${workflowId}`)
         db.close()
         process.exit(1)
       }
       if (wf.phase === 'executing') {
+        logger.warn({ workflowId }, 'Delete failed: workflow is executing')
         console.error(`Cannot delete workflow while it is executing`)
         db.close()
         process.exit(1)
@@ -371,12 +388,14 @@ program.command('delete')
       rl.close()
 
       if (answer.toLowerCase() !== 'y') {
+        logger.info({ workflowId }, 'User cancelled workflow deletion')
         console.log('Cancelled.')
         db.close()
         return
       }
 
       deleteWorkflow(db, workflowId)
+      logger.info({ workflowId }, 'Workflow deleted')
       console.log(`Deleted workflow "${wf.name}" (${workflowId})`)
       db.close()
     } catch (err) {
@@ -400,6 +419,7 @@ daemonCmd.command('start')
         stdio: 'ignore',
       })
       child.unref()
+      logger.info({ pid: child.pid }, 'Daemon detached in background')
       console.log(`Daemon started in background (PID ${child.pid})`)
       return
     }
@@ -423,8 +443,10 @@ daemonCmd.command('stop')
     }
     const result = stopService()
     if (result.success) {
+      logger.info('Daemon stopped')
       console.log('Daemon stopped.')
     } else {
+      logger.error({ error: result.error }, 'Failed to stop daemon')
       console.log(`Failed to stop daemon: ${result.error}`)
       process.exit(1)
     }
@@ -453,8 +475,10 @@ daemonCmd.command('install')
     const { installService } = await import('./service.js')
     const result = installService()
     if (result.success) {
+      logger.info('System service installed')
       console.log('Service installed successfully.')
     } else {
+      logger.error({ error: result.error }, 'Service install failed')
       console.log(`Install failed: ${result.error}`)
       process.exit(1)
     }
@@ -466,8 +490,10 @@ daemonCmd.command('uninstall')
     const { uninstallService } = await import('./service.js')
     const result = uninstallService()
     if (result.success) {
+      logger.info('System service uninstalled')
       console.log('Service uninstalled successfully.')
     } else {
+      logger.error({ error: result.error }, 'Service uninstall failed')
       console.log(`Uninstall failed: ${result.error}`)
       process.exit(1)
     }

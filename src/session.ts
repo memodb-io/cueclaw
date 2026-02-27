@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { nanoid } from 'nanoid'
 import type { Session } from './types.js'
+import { logger } from './logger.js'
 
 export function createSession(db: Database.Database, stepRunId: string, sdkSessionId?: string): Session {
   const now = new Date().toISOString()
@@ -18,6 +19,7 @@ export function createSession(db: Database.Database, stepRunId: string, sdkSessi
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(session.id, session.step_run_id, session.sdk_session_id ?? null, session.created_at, session.last_used_at, 1)
 
+  logger.debug({ sessionId: session.id, stepRunId }, 'Session created')
   return session
 }
 
@@ -49,15 +51,18 @@ export function getActiveSession(db: Database.Database, stepRunId: string): Sess
 export function deactivateSession(db: Database.Database, sessionId: string): void {
   db.prepare('UPDATE sessions SET is_active = 0, last_used_at = ? WHERE id = ?')
     .run(new Date().toISOString(), sessionId)
+  logger.debug({ sessionId }, 'Session deactivated')
 }
 
 export function updateSessionSdkId(db: Database.Database, sessionId: string, sdkSessionId: string): void {
   db.prepare('UPDATE sessions SET sdk_session_id = ?, last_used_at = ? WHERE id = ?')
     .run(sdkSessionId, new Date().toISOString(), sessionId)
+  logger.debug({ sessionId, sdkSessionId }, 'Session SDK ID updated')
 }
 
 export function cleanupStaleSessions(db: Database.Database, maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): number {
   const cutoff = new Date(Date.now() - maxAgeMs).toISOString()
   const result = db.prepare('DELETE FROM sessions WHERE is_active = 0 AND last_used_at < ?').run(cutoff)
+  logger.info({ deletedCount: result.changes, cutoff }, 'Stale sessions cleaned up')
   return result.changes
 }

@@ -40,6 +40,7 @@ export class TriggerLoop {
       "SELECT * FROM workflows WHERE phase = 'active'"
     ).all() as WorkflowRow[]
 
+    this.log.debug({ count: rows.length }, 'Loading active workflows for trigger loop')
     for (const row of rows) {
       const workflow = this.rowToWorkflow(row)
       this.registerTrigger(workflow)
@@ -106,6 +107,7 @@ export class TriggerLoop {
     if (interval) {
       clearInterval(interval)
       this.intervals.delete(workflowId)
+      this.log.debug({ workflowId }, 'Trigger unregistered')
     }
   }
 
@@ -124,6 +126,7 @@ export class TriggerLoop {
             }
           },
         })
+        this.log.info({ workflowId: workflow.id }, 'Triggered workflow completed')
         this.router.broadcastNotification(`Workflow complete: ${workflow.name}`)
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)

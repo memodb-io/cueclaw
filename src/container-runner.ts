@@ -108,6 +108,7 @@ async function spawnContainer(
   config: ReturnType<typeof loadConfig>,
 ): Promise<StepRunResult> {
   return new Promise((resolve) => {
+    logger.info({ containerName: opts.containerName, image: dockerArgs[dockerArgs.length - 1] }, 'Starting container')
     const proc = spawn('docker', dockerArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
@@ -177,6 +178,7 @@ async function spawnContainer(
     proc.on('close', (code) => {
       clearTimeout(hardTimer)
       clearInterval(idleCheck)
+      logger.info({ containerName: opts.containerName, exitCode: code }, 'Container exited')
 
       if (truncated) {
         resolve({ status: 'failed', error: 'Container output size cap exceeded' })
@@ -221,6 +223,7 @@ async function spawnContainer(
     proc.on('error', (err) => {
       clearTimeout(hardTimer)
       clearInterval(idleCheck)
+      logger.error({ containerName: opts.containerName, err }, 'Docker spawn error')
       resolve({
         status: 'failed',
         error: `Docker spawn error: ${err.message}`,
@@ -230,6 +233,7 @@ async function spawnContainer(
 }
 
 function gracefulStop(containerName: string): void {
+  logger.debug({ containerName }, 'Gracefully stopping container')
   try {
     spawn('docker', ['stop', containerName])
   } catch {

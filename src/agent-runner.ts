@@ -36,8 +36,9 @@ export function runAgent(opts: {
   const containerEnabled = config.container?.enabled ?? true
   if (containerEnabled && opts.workflowId && opts.stepId && opts.runId) {
     if (!isDockerAvailable()) {
-      logger.warn('Docker not available, falling back to local execution')
+      logger.warn({ stepId: opts.stepId }, 'Docker not available, falling back to local execution')
     } else {
+      logger.info({ stepId: opts.stepId, mode: 'container' }, 'Running agent in container mode')
       const containerOpts = prepareContainerOpts(
         opts.workflowId, opts.stepId, opts.runId,
         opts.prompt, opts.cwd, opts.allowedTools,
@@ -61,6 +62,7 @@ export function runAgent(opts: {
   }
 
   // Local mode
+  logger.info({ stepId: opts.stepId, mode: 'local' }, 'Running agent in local mode')
   let aborted = false
 
   const resultPromise = (async (): Promise<StepRunResult> => {
@@ -134,6 +136,7 @@ export function runAgent(opts: {
         opts.onProgress?.(message)
       }
 
+      logger.debug({ stepId: opts.stepId, status: 'succeeded' }, 'Agent completed')
       return { status: 'succeeded', output: result, sessionId }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err)

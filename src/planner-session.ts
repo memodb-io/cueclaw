@@ -46,6 +46,7 @@ export async function startPlannerSession(
     workflow: null,
   }
 
+  logger.info({ sessionId: session.id }, 'Planner session started')
   const turn = await runPlannerTurn(session, config, callbacks)
   return { session, turn }
 }
@@ -57,12 +58,14 @@ export async function continuePlannerSession(
   callbacks?: StreamCallbacks,
 ): Promise<{ session: PlannerSession; turn: PlannerTurn }> {
   session.messages.push({ role: 'user', content: userMessage })
+  logger.debug({ sessionId: session.id, turnCount: session.messages.length }, 'Planner session continued')
   const turn = await runPlannerTurn(session, config, callbacks)
   return { session, turn }
 }
 
 export function cancelPlannerSession(session: PlannerSession): void {
   session.status = 'cancelled'
+  logger.info({ sessionId: session.id }, 'Planner session cancelled')
 }
 
 // ─── Internal ───
@@ -142,6 +145,7 @@ Guidelines:
 
   switch (result.type) {
     case 'question': {
+      logger.debug({ sessionId: session.id }, 'Planner asking clarifying question')
       // Add tool result so next turn has proper context
       const toolBlock = response.content.find(b => b.type === 'tool_use' && b.name === 'ask_question')
       if (toolBlock && toolBlock.type === 'tool_use') {
@@ -176,6 +180,7 @@ Guidelines:
     }
 
     case 'plan': {
+      logger.info({ sessionId: session.id }, 'Planner generated plan')
       const now = new Date().toISOString()
       const workflow: Workflow = {
         ...result.plannerOutput,
@@ -194,6 +199,7 @@ Guidelines:
       return { type: 'text', content: result.text }
 
     case 'error':
+      logger.error({ sessionId: session.id, error: result.error }, 'Planner session turn error')
       return { type: 'error', content: result.error }
   }
 }

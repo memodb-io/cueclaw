@@ -32,6 +32,7 @@ export class MessageRouter {
 
   registerChannel(channel: Channel): void {
     this.channels.set(channel.name, channel)
+    logger.debug({ channel: channel.name }, 'Channel registered')
   }
 
   start(): void {
@@ -71,9 +72,11 @@ export class MessageRouter {
     }
 
     const text = typeof message === 'string' ? message : message.text
+    logger.debug({ channelName, chatJid }, 'Inbound message received')
 
     // Rate limiting
     if (this.isRateLimited(chatJid)) {
+      logger.warn({ chatJid, channelName }, 'Rate limit exceeded')
       await channel.sendMessage(chatJid, 'Rate limited, please wait before sending more messages.')
       return
     }
@@ -252,6 +255,7 @@ export class MessageRouter {
     if (['yes', 'y', 'confirm', '1'].includes(lower)) {
       this.pendingConfirmations.delete(chatJid)
       const confirmed = confirmPlan(pending.workflow)
+      logger.info({ workflowId: confirmed.id, chatJid }, 'Workflow confirmed via channel')
       await channel.sendMessage(chatJid, `Workflow activated: ${confirmed.name} (${confirmed.id})`)
 
       channel.setTyping?.(chatJid, true)
@@ -277,6 +281,7 @@ export class MessageRouter {
     } else if (['no', 'n', 'cancel', '3'].includes(lower)) {
       this.pendingConfirmations.delete(chatJid)
       rejectPlan(pending.workflow)
+      logger.info({ workflowId: pending.workflowId, chatJid }, 'Workflow rejected via channel')
       await channel.sendMessage(chatJid, 'Plan cancelled.')
     } else if (['modify', 'm', '2'].includes(lower)) {
       await channel.sendMessage(chatJid, 'Describe your modifications:')
@@ -289,6 +294,7 @@ export class MessageRouter {
 
       try {
         const modified = await modifyPlan(pending.workflow, text, this.config)
+        logger.info({ workflowId: modified.id, chatJid }, 'Workflow modified via channel')
         insertWorkflow(this.db, modified)
         channel.setTyping?.(chatJid, false)
 
