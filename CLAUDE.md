@@ -65,26 +65,26 @@ TUI: Onboarding → Chat (slash commands) → Plan View → Execution View
 
 ## CI / CD
 
-### CI (`ci.yml`)
+Single workflow (`ci.yml`) — runs on every push to `main` and all PRs.
 
-Runs on every push to `main` and all PRs — 4 parallel jobs:
+**CI jobs** (parallel):
 - **test**: build + `vitest run`
 - **lint**: `eslint`
 - **typecheck**: `tsc --noEmit`
 - **changeset**: PR-only, warns if changeset is missing (non-blocking)
 
-### Release (`release.yml`)
-
-Runs on push to `main` only. Uses [changesets](https://github.com/changesets/changesets) for versioning and npm publishing.
+**Release job** (push to `main` only, runs after test+lint+typecheck pass):
+- Uses [changesets](https://github.com/changesets/changesets) for versioning and npm publishing
+- Publishes with `--provenance` for supply chain security
 
 **Flow**:
 1. PR with `.changeset/*.md` file merged to `main`
-2. Release workflow runs → `changesets/action` detects pending changesets → creates "Version Packages" PR (bumps `package.json`, updates `CHANGELOG.md`, deletes changeset files)
-3. Merge the Version PR → Release workflow runs again → `changeset publish` publishes to npm + creates git tag + GitHub Release automatically
-4. If no pending changesets exist, the workflow is a no-op
+2. Release job runs → `changesets/action` detects pending changesets → creates "Version Packages" PR (bumps `package.json`, updates `CHANGELOG.md`, deletes changeset files)
+3. Merge the Version PR → Release job runs again → `changeset publish` publishes to npm + creates git tag + GitHub Release automatically
+4. If no pending changesets exist, the release job is a no-op
 
 **When to add a changeset**: PRs that affect published code (features, fixes, API changes)
 **When NOT needed**: docs, CI config, tests-only, internal refactors
 **Developer workflow**: run `pnpm changeset` before submitting PR, select patch/minor/major, write summary
 
-**Auth**: npm OIDC Trusted Publishing (no NPM_TOKEN)
+**Auth**: npm OIDC Trusted Publishing with provenance (no NPM_TOKEN)
