@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import { loadConfig, ensureCueclawHome, createDefaultConfig, cueclawHome } from './config.js'
 import { initDb, listWorkflows, insertWorkflow, getWorkflow, updateWorkflowPhase, deleteWorkflow, getWorkflowRunsByWorkflowId, getStepRunsByRunId } from './db.js'
 import { loadSecrets } from './env.js'
-import { logger } from './logger.js'
+import { logger, initLogger } from './logger.js'
 
 const require = createRequire(import.meta.url)
 const { version: pkgVersion } = require('../package.json') as { version: string }
@@ -607,4 +607,12 @@ program
 loadSecrets()
 ensureCueclawHome()
 createDefaultConfig()
+
+try {
+  const config = loadConfig()
+  initLogger({ level: config.logging?.level, dir: config.logging?.dir })
+} catch {
+  // Config may not be valid yet (pre-onboarding), fall through to default logger
+}
+
 program.parse()

@@ -11,7 +11,8 @@ import {
 } from './db.js'
 import { ExecutorError } from './types.js'
 import type { Workflow, PlanStep, FailurePolicy, WorkflowRun, StepRun } from './types.js'
-import { logger } from './logger.js'
+import type pino from 'pino'
+import { logger, createExecutionLogger } from './logger.js'
 
 // ─── Input Reference Resolution ───
 
@@ -92,6 +93,7 @@ async function executeStepOnce(
   db: Database.Database,
   cwd: string,
   onProgress?: (stepId: string, msg: any) => void,
+  execLogger?: pino.Logger,
 ): Promise<StepRunResult> {
   const stepRunId = `sr_${nanoid()}`
   const now = new Date().toISOString()
@@ -104,6 +106,7 @@ async function executeStepOnce(
     started_at: now,
   }
   insertStepRun(db, stepRun)
+  execLogger?.info({ stepId: step.id, stepRunId, attempt: 'start' }, `Step started: ${step.id}`)
 
   // Build prompt from step description + resolved inputs
   const inputContext = Object.keys(resolvedInputs).length > 0
@@ -132,6 +135,12 @@ async function executeStepOnce(
   // Update step run in DB
   updateStepRunStatus(db, stepRunId, result.status, result.output ?? undefined, result.error)
 
+  if (result.status === 'failed') {
+    execLogger?.error({ stepId: step.id, stepRunId, error: result.error }, `Step failed: ${step.id}`)
+  } else {
+    execLogger?.info({ stepId: step.id, stepRunId, status: result.status }, `Step completed: ${step.id}`)
+  }
+
   return result
 }
 
@@ -143,12 +152,13 @@ async function executeStepWithRetry(
   cwd: string,
   policy: FailurePolicy,
   onProgress?: (stepId: string, msg: any) => void,
+  execLogger?: pino.Logger,
 ): Promise<StepRunResult> {
   const maxRetries = policy.max_retries ?? 0
   let delay = policy.retry_delay_ms ?? 5000
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const result = await executeStepOnce(step, resolvedInputs, runId, db, cwd, onProgress)
+    const result = await executeStepOnce(step, resolvedInputs, runId, db, cwd, onProgress, execLogger)
     if (result.status !== 'failed' || attempt === maxRetries) return result
 
     logger.info({ stepId: step.id, attempt, delay }, 'Retrying step')
@@ -182,6 +192,9 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
   }
   insertWorkflowRun(db, run)
   updateWorkflowPhase(db, workflow.id, 'executing')
+
+  const execLogger = createExecutionLogger(workflow.id, runId)
+  execLogger.info({ workflowId: workflow.id, runId, steps: workflow.steps.length }, 'Workflow execution started')
 
   const completed = new Map<string, StepRunResult>()
   const remaining = new Set(workflow.steps.map(s => s.id))
@@ -251,7 +264,7 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
           const resolvedInputs = resolveInputs(step.inputs, completed, triggerData)
           const result = await executeStepWithRetry(
             step, resolvedInputs, runId, db, cwd,
-            workflow.failure_policy, onProgress,
+            workflow.failure_policy, onProgress, execLogger,
           )
           return { stepId: step.id, result }
         })
@@ -309,6 +322,8 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
   } else {
     updateWorkflowPhase(db, workflow.id, 'active')
   }
+
+  execLogger.info({ workflowId: workflow.id, runId, status: finalStatus }, 'Workflow execution finished')
 
   return { runId, status: finalStatus, results: completed }
 }
