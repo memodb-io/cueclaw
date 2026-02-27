@@ -35,7 +35,7 @@ const ConfigSchema = z.object({
     dir: z.string().default('~/.cueclaw/logs'),
   }).optional(),
   container: z.object({
-    enabled: z.boolean().default(false),
+    enabled: z.boolean().default(true),
     image: z.string().default('cueclaw-agent:latest'),
     timeout: z.number().default(1_800_000),
     max_output_size: z.number().default(10_485_760),
@@ -153,6 +153,9 @@ claude:
     model: claude-sonnet-4-6
   executor:
     model: claude-sonnet-4-6
+
+container:
+  enabled: true
 
 logging:
   level: info

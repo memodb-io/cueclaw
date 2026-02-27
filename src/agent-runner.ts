@@ -1,6 +1,7 @@
 import { loadConfig } from './config.js'
 import { checkBashSafety } from './hooks.js'
 import { runContainerAgent, prepareContainerOpts } from './container-runner.js'
+import { isDockerAvailable } from './container-runtime.js'
 import { logger } from './logger.js'
 import type { StepStatus } from './types.js'
 
@@ -31,26 +32,31 @@ export function runAgent(opts: {
 }): AgentHandle {
   const config = loadConfig()
 
-  // Container mode
-  if (config.container?.enabled && opts.workflowId && opts.stepId && opts.runId) {
-    const containerOpts = prepareContainerOpts(
-      opts.workflowId, opts.stepId, opts.runId,
-      opts.prompt, opts.cwd, opts.allowedTools,
-    )
-    const resultPromise = runContainerAgent({
-      ...containerOpts,
-      signal: opts.signal,
-      onProgress: opts.onProgress,
-    })
-    return {
-      resultPromise,
-      abort: () => {
-        try {
-          import('node:child_process').then(({ spawn }) => {
-            spawn('docker', ['stop', containerOpts.containerName])
-          })
-        } catch { /* best-effort */ }
-      },
+  // Container mode: enabled by default unless explicitly disabled
+  const containerEnabled = config.container?.enabled ?? true
+  if (containerEnabled && opts.workflowId && opts.stepId && opts.runId) {
+    if (!isDockerAvailable()) {
+      logger.warn('Docker not available, falling back to local execution')
+    } else {
+      const containerOpts = prepareContainerOpts(
+        opts.workflowId, opts.stepId, opts.runId,
+        opts.prompt, opts.cwd, opts.allowedTools,
+      )
+      const resultPromise = runContainerAgent({
+        ...containerOpts,
+        signal: opts.signal,
+        onProgress: opts.onProgress,
+      })
+      return {
+        resultPromise,
+        abort: () => {
+          try {
+            import('node:child_process').then(({ spawn }) => {
+              spawn('docker', ['stop', containerOpts.containerName])
+            })
+          } catch { /* best-effort */ }
+        },
+      }
     }
   }
 
