@@ -16,6 +16,7 @@ jobs:
       contents: write
       pull-requests: write
       id-token: write
+      packages: write
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
@@ -38,3 +39,25 @@ jobs:
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push container image
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+
+          cd container/agent-runner
+          pnpm install
+          pnpm build
+          cd ..
+
+          docker build \
+            -t "ghcr.io/memodb-io/cueclaw-agent:latest" \
+            -t "ghcr.io/memodb-io/cueclaw-agent:${VERSION}" \
+            .
+
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          docker push "ghcr.io/memodb-io/cueclaw-agent:latest"
+          docker push "ghcr.io/memodb-io/cueclaw-agent:${VERSION}"
