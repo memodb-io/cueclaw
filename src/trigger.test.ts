@@ -12,12 +12,11 @@ vi.mock('node:util', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:util')>()
   return {
     ...original,
-    promisify: (fn: any) => {
-      // Return a function that calls the mocked execFile
-      return async (...args: any[]) => {
+    promisify: (_fn: unknown) => {
+      return async (...args: unknown[]) => {
         const { execFile } = await import('node:child_process')
         return new Promise((resolve, reject) => {
-          (execFile as any)(...args, (err: any, stdout: string, stderr: string) => {
+          (execFile as any)(...args, (err: unknown, stdout: string, stderr: string) => {
             if (err) reject(err)
             else resolve({ stdout, stderr })
           })
@@ -57,7 +56,7 @@ describe('trigger', () => {
 
     it('returns trigger data when output changes', async () => {
       const { execFile } = await import('node:child_process')
-      ;(execFile as any).mockImplementation((_cmd: string, _args: string[], _opts: any, cb: Function) => {
+      ;(execFile as any).mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (...a: unknown[]) => void) => {
         cb(null, 'new-output\n', '')
       })
 
@@ -71,7 +70,7 @@ describe('trigger', () => {
 
     it('returns null when output has not changed', async () => {
       const { execFile } = await import('node:child_process')
-      ;(execFile as any).mockImplementation((_cmd: string, _args: string[], _opts: any, cb: Function) => {
+      ;(execFile as any).mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (...a: unknown[]) => void) => {
         cb(null, 'same-output\n', '')
       })
 
@@ -87,7 +86,7 @@ describe('trigger', () => {
 
     it('returns null and logs error on script failure', async () => {
       const { execFile } = await import('node:child_process')
-      ;(execFile as any).mockImplementation((_cmd: string, _args: string[], _opts: any, cb: Function) => {
+      ;(execFile as any).mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (...a: unknown[]) => void) => {
         cb(new Error('Script failed'), '', '')
       })
 

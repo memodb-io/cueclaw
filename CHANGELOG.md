@@ -1,5 +1,11 @@
 # cueclaw
 
+## 0.1.2
+
+### Patch Changes
+
+- Fix 7 code issues: CLI version from package.json, daemon restart command, --detach flag, channel disconnect on shutdown, async poll trigger, Telegram setTyping guard, confirmation timeout notification. Sync all documentation with implementation.
+
 ## 0.1.1
 
 ### Patch Changes
