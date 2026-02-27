@@ -28,6 +28,8 @@ function createMockUIState(overrides: Partial<UIState> = {}): UIState {
     isConversing: false,
     themeVersion: 0,
     statusWorkflows: [],
+    detailRuns: [],
+    detailStepRuns: [],
     ...overrides,
   }
 }
@@ -47,6 +49,8 @@ function createMockUIActions(overrides: Partial<UIActions> = {}): UIActions {
     handleStatusSelect: vi.fn(),
     handleStatusStop: vi.fn(),
     handleStatusDelete: vi.fn(),
+    handleDetailBack: vi.fn(),
+    handleDetailSelectRun: vi.fn(),
     ...overrides,
   }
 }

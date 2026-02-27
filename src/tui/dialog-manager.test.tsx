@@ -14,7 +14,7 @@ function DialogTrigger({ dialog }: { dialog: Dialog }) {
   const { showDialog } = useDialog()
   React.useEffect(() => {
     showDialog(dialog)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
   return <Text>content</Text>
 }
 
@@ -112,7 +112,7 @@ describe('DialogManager priority queue', () => {
           actions: [{ key: 'y', label: 'Yes', handler: vi.fn() }],
           priority: DialogPriority.Critical,
         })
-      }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      }, [])
       return <Text>content</Text>
     }
 
@@ -144,7 +144,7 @@ describe('DialogManager priority queue', () => {
           actions: [{ key: 'y', label: 'Yes', handler: vi.fn() }],
           priority: DialogPriority.Normal,
         })
-      }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      }, [])
       return <Text>content</Text>
     }
 

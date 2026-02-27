@@ -98,7 +98,7 @@ export function useKeypress(
     if (!ctx) return
     ctx.register({ id: stableId, priority, handler, isActive })
     return () => ctx.unregister(stableId)
-  }, [ctx, stableId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ctx, stableId])
 
   // Update handler and isActive on changes
   useEffect(() => {

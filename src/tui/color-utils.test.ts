@@ -37,7 +37,7 @@ describe('interpolateColor', () => {
   it('blends dark background with dim overlay at 12%', () => {
     const result = interpolateColor('#1E1E2E', '#6C7086', 0.12)
     // Should be slightly lighter than base
-    const [r, g, b] = hexToRgb(result)
+    const [r, , b] = hexToRgb(result)
     expect(r).toBeGreaterThan(30)
     expect(b).toBeGreaterThan(46)
   })

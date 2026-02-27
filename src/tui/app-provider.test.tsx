@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { appReducer } from './app-provider.js'
 import type { StepProgress } from './execution-view.js'
+import type { View } from './ui-state-context.js'
 
 function createInitialState() {
   return {
     view: 'chat' as const,
-    previousView: null as string | null,
+    previousView: null as View | null,
     messages: [],
     workflow: null,
     isGenerating: false,
