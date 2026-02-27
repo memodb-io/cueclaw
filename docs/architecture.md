@@ -59,7 +59,7 @@ Flat `src/` — single-responsibility files laid out directly, no over-layering.
 ```
 cueclaw/
 ├── src/
-│   ├── index.ts                 # Main orchestrator: state mgmt, message loop, agent calls
+│   ├── index.ts                 # Library barrel re-exports
 │   ├── cli.ts                   # CLI entry (commander)
 │   ├── config.ts                # Config constants, paths, env vars
 │   ├── types.ts                 # Centralized type definitions
@@ -84,8 +84,15 @@ cueclaw/
 │   ├── mcp-server.ts            # CueClaw MCP Server (injected into container agent)
 │   ├── container-runner.ts      # Docker spawn, stdin/stdout protocol, mounts
 │   ├── mount-security.ts        # Mount allowlist validation
-│   ├── router.ts                # Message formatting, outbound routing
+│   ├── router.ts                # Message routing, intent classification, confirmation flow
 │   ├── service.ts               # System service integration (launchd/systemd)
+│   ├── daemon.ts                # Daemon main entry point (startDaemon)
+│   │
+│   ├── setup.ts                 # Setup orchestrator (runSetup)
+│   ├── setup-environment.ts     # Check Docker, Node.js versions
+│   ├── setup-container.ts       # Build container image
+│   ├── setup-auth.ts            # Validate API key
+│   ├── setup-verify.ts          # Container smoke test
 │   │
 │   ├── channels/
 │   │   ├── whatsapp.ts          # WhatsApp Channel (Baileys)
@@ -97,7 +104,7 @@ cueclaw/
 │       ├── theme.ts             # @inkjs/ui extendTheme — semantic color definitions
 │       ├── version.ts           # Dynamic version detection (dev vs package.json)
 │       ├── chat.tsx             # Chat component (messages, streaming, command autocomplete)
-│       ├── commands.ts          # Slash command registry (15+ commands: /help, /list, /status, etc.)
+│       ├── commands.ts          # Slash command registry (14 commands: /help, /list, /status, etc.)
 │       ├── daemon-bridge.ts     # TUI ↔ daemon abstraction (external service or in-process)
 │       ├── onboarding.tsx       # Interactive setup wizard (API key, base URL, bots)
 │       ├── renderers.tsx        # Workflow display components (WorkflowTable, WorkflowDetail)
@@ -113,15 +120,7 @@ cueclaw/
 │       ├── tsconfig.json
 │       └── src/
 │           ├── index.ts         # Agent entry (query() call, session loop)
-│           └── ipc-mcp-stdio.ts # Container-side MCP server
-│
-├── setup/                       # Install/init
-│   ├── index.ts
-│   ├── environment.ts
-│   ├── container.ts
-│   ├── auth.ts
-│   ├── service.ts
-│   └── verify.ts
+│           └── ipc-mcp-stdio.ts # Container-side IPC helpers (plain functions, not MCP server)
 │
 ├── plans/                       # Implementation phase docs
 ├── docs/                        # Architecture & reference docs

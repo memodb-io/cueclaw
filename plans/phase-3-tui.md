@@ -10,7 +10,7 @@
 
 By the end of Phase 3, running `cueclaw` (or `cueclaw tui`) launches a full interactive terminal experience:
 
-1. ASCII banner animation on startup
+1. Title header with version and path on startup
 2. Chat interface to describe workflows in natural language
 3. Plan view showing generated steps with confirm/modify/cancel
 4. Live execution progress display
@@ -47,12 +47,11 @@ import React, { useReducer } from 'react'
 import { Box } from 'ink'
 import { ThemeProvider } from '@inkjs/ui'
 import { cueclawTheme } from './theme.js'
-import { Banner } from './banner.js'
 import { Chat } from './chat.js'
 import { PlanView } from './plan-view.js'
 import { Status } from './status.js'
 
-type View = 'banner' | 'chat' | 'plan' | 'dashboard' | 'execution'
+type View = 'onboarding' | 'chat' | 'plan' | 'dashboard' | 'execution'
 
 export function App() {
   const [state, dispatch] = useReducer(appReducer, initialState)
@@ -60,7 +59,15 @@ export function App() {
   return (
     <ThemeProvider theme={cueclawTheme}>
       <Box flexDirection="column" height="100%">
-        {state.view === 'banner' && <Banner onComplete={() => dispatch({ type: 'SHOW_CHAT' })} />}
+        {/* Static title header: "CueClaw" + version + path */}
+        <Static items={state.view !== 'onboarding' ? ['banner'] : []}>
+          {(item) => (
+            <Box key={item} flexDirection="column" paddingX={1} paddingY={1}>
+              <Text color="cyan" bold>CueClaw</Text>
+              <Text dimColor>{versionLabel} · {displayPath}</Text>
+            </Box>
+          )}
+        </Static>
         {state.view === 'chat' && <Chat onPlanGenerated={(wf) => dispatch({ type: 'SHOW_PLAN', workflow: wf })} />}
         {state.view === 'plan' && <PlanView workflow={state.workflow} onConfirm={...} onModify={...} onCancel={...} />}
         {state.view === 'dashboard' && <Status workflows={state.workflows} />}
@@ -85,13 +92,6 @@ import { extendTheme, defaultTheme } from '@inkjs/ui'
 
 export const cueclawTheme = extendTheme(defaultTheme, {
   components: {
-    // Banner
-    Banner: {
-      styles: {
-        logo: () => ({ color: 'cyan' }),
-        tagline: () => ({ color: 'gray', dimColor: true }),
-      },
-    },
     // Plan view
     PlanView: {
       styles: {
@@ -152,34 +152,22 @@ function StepLine({ step, status }: { step: PlanStep; status?: StepStatus }) {
 - No hex/rgb — ensures 16-color terminal compatibility
 - Future: `config.yaml`'s `ui.theme` field can support custom themes, overriding `cueclawTheme`
 
-### 3.3 ASCII Banner (`src/tui/banner.tsx`)
+### 3.3 Title Header
 
-MVP uses a static ASCII banner — no frame animation (animation can be a future enhancement).
+The app displays a simple static title header (not a separate view or component):
 
-```
-  ██████╗██╗   ██╗███████╗ ██████╗██╗      █████╗ ██╗    ██╗
- ██╔════╝██║   ██║██╔════╝██╔════╝██║     ██╔══██╗██║    ██║
- ██║     ██║   ██║█████╗  ██║     ██║     ███████║██║ █╗ ██║
- ██║     ██║   ██║██╔══╝  ██║     ██║     ██╔══██║██║███╗██║
- ╚██████╗╚██████╔╝███████╗╚██████╗███████╗██║  ██║╚███╔███╔╝
-  ╚═════╝ ╚═════╝ ╚══════╝ ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝
-
- orchestrate your agents with natural language
-```
-
-- [ ] Static ASCII art + tagline, rendered with Ink `<Text>` component
-- [ ] Use `useComponentTheme('Banner')` for colors — no hardcoded values
-- [ ] Show for ~1s then auto-transition to Chat view (or `--no-banner` to skip)
-- [ ] Non-blocking: initialization proceeds in parallel
+- [x] `<Text color="cyan" bold>CueClaw</Text>` + version + working directory path
+- [x] Rendered via Ink `<Static>` so it stays pinned at the top
+- [x] Hidden during onboarding view
 
 ### 3.4 Chat View (`src/tui/chat.tsx`)
 
-- [ ] Scrollable message history (user messages + CueClaw responses)
-- [ ] Text input at the bottom with prompt indicator (`> `)
-- [ ] On submit: send user text to Planner, show "Generating plan..." spinner
-- [ ] When Planner returns: auto-switch to Plan view
-- [ ] Support multi-line input (Shift+Enter for newline, Enter to submit)
-- [ ] Message formatting: user messages vs. system messages with distinct styling
+- [x] Message history (user messages + CueClaw responses) — no scroll management (Ink limitation)
+- [x] Text input at the bottom with prompt indicator (`> `)
+- [x] On submit: send user text to Planner, show "Thinking..." spinner
+- [x] When Planner returns: auto-switch to Plan view
+- [ ] ~~Support multi-line input~~ — NOT IMPLEMENTED (Enter always submits)
+- [x] Message formatting: user, system, and assistant messages with distinct styling
 
 ```
 You: Create a workflow that monitors GitHub issues assigned to me
@@ -190,13 +178,13 @@ CueClaw: Generating execution plan...
 
 ### 3.5 Plan View (`src/tui/plan-view.tsx`)
 
-- [ ] Display workflow name, trigger config, and step list
-- [ ] Each step shows: index, description, dependencies, status indicator
-- [ ] Three action buttons: `[Y] Confirm`, `[M] Modify`, `[N] Cancel`
-- [ ] Confirm → calls `confirmPlan()` from Phase 1 → transitions to execution
-- [ ] Modify → prompts for modification text → calls `modifyPlan()` → re-renders updated plan
-- [ ] Cancel → discards workflow → returns to Chat view
-- [ ] Highlight dependencies visually (indent or connecting lines)
+- [x] Display workflow name, trigger config, and step list
+- [x] Each step shows: index, description, dependencies, status indicator
+- [x] Three action buttons: `[Y] Confirm`, `[M] Modify`, `[N] Cancel`
+- [x] Confirm → calls `confirmPlan()` (pure transformation) → persists to DB → transitions to execution or active
+- [x] Modify → returns to Chat view with "Describe your modifications:" prompt → re-plans via PlannerSession
+- [x] Cancel → discards workflow → returns to Chat view
+- [x] Highlight dependencies visually (`└─ depends on:` lines)
 
 ```
 ┌─ Plan: GitHub Issue Auto PR ───────────────────┐
@@ -216,36 +204,38 @@ CueClaw: Generating execution plan...
 └────────────────────────────────────────────────┘
 ```
 
-### 3.6 Workflow List / Dashboard (`src/tui/status.tsx`)
+### 3.6 Workflow List / Dashboard
 
-- [ ] Table view of all workflows: ID, name, phase, last run status, next trigger
-- [ ] Select a workflow to view execution details
-- [ ] Keyboard navigation: arrow keys to select, Enter to view details
-- [ ] `Ctrl+D` shortcut from any view to jump to Dashboard
-- [ ] Color-coded status: green=completed, yellow=running, red=failed, gray=paused
+No standalone Dashboard view exists. Workflow listing is handled inline in Chat via slash commands:
+
+- [x] `/list` (or `/ls`) renders `WorkflowTable` component inline in chat messages
+- [x] `/status <id>` renders `WorkflowDetail` component inline in chat messages
+- [x] `Ctrl+D` shortcut runs `/list` inline (does not switch views)
+- [x] Color-coded phase indicators in table output
+- [x] Workflow management commands: `/pause`, `/resume`, `/delete`
+
+**Note:** `src/tui/status.tsx` exists as a standalone component but is not wired into app view navigation. The inline slash command approach was chosen for simplicity and consistency with Bot channel interaction patterns.
 
 ```
-┌─ Workflows ──────────────────────────────────────────────────┐
-│ ID          Name                    Phase       Last Run     │
-│ wf_abc123   Issue Auto PR           executing   2m ago ●     │
-│ wf_def456   PR Review Loop          paused      1h ago ◌     │
-│ wf_ghi789   Daily Report            completed   today ✓      │
-│                                                              │
-│ [Enter] View  [P] Pause  [R] Resume  [D] Delete  [Q] Back    │
-└──────────────────────────────────────────────────────────────┘
+> /list
+
+ ID           Name              Phase       Trigger
+ wf_abc123    Issue Auto PR     active      poll (60s)
+ wf_def456    PR Review Loop    paused      poll (60s)
+ wf_ghi789    Daily Report      completed   cron (0 9 * * *)
 ```
 
-### 3.7 Execution Progress View
+### 3.7 Execution Progress View (`src/tui/execution-view.tsx`)
 
-- [ ] Real-time step progress: checkmark for completed, spinner for running, dash for pending
-- [ ] Duration display for each completed step
-- [ ] Live output stream from the agent (streamed from `onProgress` callback)
-- [ ] Auto-scroll to latest output
-- [ ] `Ctrl+C` to cancel running execution
+- [x] Real-time step progress with icons: `✓` (succeeded), `●` (running), `✗` (failed), `○` (skipped)
+- [x] Spinner displayed for running steps
+- [x] Duration display for each completed step
+- [x] Live output display (last 10 lines from output prop)
+- [x] `X` to abort/cancel while running; `Enter`/`Q`/`Esc` to return when complete
+- [ ] ~~Auto-scroll to latest output~~ — NOT IMPLEMENTED (Ink limitation)
 
 ```
 Workflow: GitHub Issue Auto PR          Status: Running
-Trigger: Issue #42 assigned             Started: 2m ago
 
 Steps:
 ✓ 1. Clone repo and create branch      (12s)
@@ -253,33 +243,35 @@ Steps:
   3. Commit plan and create Draft PR    (pending)
   4. Notify user                        (pending)
 
-── Live Output ──────────────────────────────────
-[agent] Reading src/auth/...
-[agent] Analyzing login flow requirements...
-─────────────────────────────────────────────────
+[X] Abort
 ```
 
 ### 3.8 TUI Channel Implementation (`src/channels/tui.ts`)
 
-- [ ] Implement the `Channel` interface for local TUI usage
-- [ ] `jid` is fixed to `"local"` for all TUI interactions
-- [ ] `sendMessage` pushes messages to the TUI message display
-- [ ] `connect()` is a no-op (always connected)
-- [ ] Bridge between TUI input events and `OnInboundMessage` callback
-- [ ] TUI Chat should route user input through `MessageRouter.handleInbound('tui', 'local', message)` for consistency with Bot channels
+- [x] Implement the `Channel` interface for local TUI usage
+- [x] `jid` is fixed to `"local"` for all TUI interactions
+- [x] `sendMessage` calls internal `sendFn` callback to push messages to TUI
+- [x] `connect()` is a no-op (always connected)
+- [x] `sendConfirmation()` sends text message indicating plan is ready
+- [ ] ~~TUI Chat routes through `MessageRouter.handleInbound()`~~ — NOT IMPLEMENTED (TUI input handled directly in `app.tsx`'s `handleChatSubmit`, not routed through MessageRouter like Bot channels)
 
 ### 3.9 View Navigation
 
-| View | Entry | Shortcut |
-|------|-------|----------|
-| **Chat** | Default view on startup | `Esc` from Plan view |
-| **Plan** | Auto-entered when Planner returns | — |
-| **Dashboard** | From Chat view | `Ctrl+D` |
-| **Execution** | Select from Dashboard | `Enter` on a workflow |
+Actual views: `'onboarding' | 'chat' | 'plan' | 'execution' | 'exit_prompt'`
 
-- [ ] `Tab` cycles between Chat and Dashboard
-- [ ] `Esc` goes back to previous view
-- [ ] Status bar at bottom shows current view + available shortcuts
+| View | Entry | Exit |
+|------|-------|------|
+| **Onboarding** | First run (no config) | Completes setup → Chat |
+| **Chat** | Default view after setup | — (central hub) |
+| **Plan** | Auto-entered when Planner returns | `[Y]` → Execution, `[M]` → Chat, `[N]` → Chat |
+| **Execution** | After confirming a plan | `Enter`/`Q`/`Esc` when complete → Chat |
+| **Exit Prompt** | `Ctrl+C` from any view | Service install or quit |
+
+- [x] `Ctrl+D` runs `/list` inline in Chat (not a separate view)
+- [x] `Ctrl+C` shows exit prompt with daemon service install option
+- [x] Chat footer shows available hints and daemon status
+- [ ] ~~`Tab` cycles between Chat and Dashboard~~ — NOT IMPLEMENTED (no Dashboard view)
+- [ ] ~~`Esc` goes back to previous view~~ — NOT IMPLEMENTED (individual views handle their own exit)
 
 ---
 
@@ -290,23 +282,21 @@ Steps:
 | Terminal compatibility | ANSI color names (16-color), terminal auto-adapts to dark/light mode |
 | Theme system | `@inkjs/ui` ThemeProvider + `extendTheme` + `useComponentTheme` |
 | No hex/rgb | Ensures 16-color terminal compatibility; dark/light handled by terminal |
-| Banner | Static ASCII art, `--no-banner` flag to skip |
+| Title header | Simple `<Text>` with version + path, pinned via `<Static>` |
 | Future custom themes | `config.yaml`'s `ui.theme` field can override the default theme |
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `cueclaw` launches TUI with ASCII banner
-- [ ] Banner displays briefly and transitions to Chat view
-- [ ] Typing a workflow description and pressing Enter triggers Planner
-- [ ] Generated plan displays correctly in Plan view
-- [ ] `[Y]` confirms and starts execution; `[M]` prompts for modifications; `[N]` cancels
-- [ ] Execution progress shows real-time step status updates
-- [ ] Dashboard lists all workflows with correct status
-- [ ] `Ctrl+D` navigates to Dashboard from Chat
-- [ ] `--no-banner` flag skips banner
-- [ ] TUI Channel correctly implements Channel interface
+- [x] `cueclaw` launches TUI with title header (CueClaw + version + path)
+- [x] Typing a workflow description and pressing Enter triggers Planner (multi-turn via PlannerSession)
+- [x] Generated plan displays correctly in Plan view
+- [x] `[Y]` confirms and starts execution; `[M]` returns to chat for modifications; `[N]` cancels
+- [x] Execution progress shows real-time step status updates
+- [x] `/list` and `/status` commands show workflow information inline in Chat
+- [x] `Ctrl+D` runs `/list` inline in Chat
+- [x] TUI Channel implements Channel interface (input not routed through MessageRouter)
 
 ---
 

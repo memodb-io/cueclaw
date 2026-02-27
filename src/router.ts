@@ -45,6 +45,13 @@ export class MessageRouter {
     }
   }
 
+  /** Disconnect all registered channels */
+  async disconnectAll(): Promise<void> {
+    await Promise.allSettled(
+      [...this.channels.values()].map(c => c.disconnect())
+    )
+  }
+
   /** Broadcast a notification to all connected channels (used by MCP handler) */
   broadcastNotification(message: string): void {
     for (const channel of this.channels.values()) {
@@ -73,8 +80,14 @@ export class MessageRouter {
 
     if (text.startsWith('/') || text.startsWith('!')) {
       await this.handleCommand(channel, chatJid, text)
-    } else if (this.hasPendingConfirmation(chatJid)) {
-      await this.handleConfirmation(channel, chatJid, text)
+    } else if (this.pendingConfirmations.has(chatJid)) {
+      const pending = this.pendingConfirmations.get(chatJid)!
+      if (Date.now() > pending.expiresAt) {
+        this.pendingConfirmations.delete(chatJid)
+        await channel.sendMessage(chatJid, 'Your pending plan has expired. Send a new description to start over.')
+      } else {
+        await this.handleConfirmation(channel, chatJid, text)
+      }
     } else {
       await this.classifyAndRoute(channel, chatJid, text)
     }
@@ -292,16 +305,6 @@ export class MessageRouter {
         await channel.sendMessage(chatJid, `Modification failed: ${msg}`)
       }
     }
-  }
-
-  private hasPendingConfirmation(chatJid: string): boolean {
-    const pending = this.pendingConfirmations.get(chatJid)
-    if (!pending) return false
-    if (Date.now() > pending.expiresAt) {
-      this.pendingConfirmations.delete(chatJid)
-      return false
-    }
-    return true
   }
 
   private isRateLimited(chatJid: string): boolean {

@@ -142,6 +142,54 @@ describe('MessageRouter', () => {
     })
   })
 
+  describe('confirmation timeout', () => {
+    it('notifies user when pending confirmation has expired', async () => {
+      const { createAnthropicClient } = await import('./anthropic-client.js')
+      const mockCreate = vi.fn().mockResolvedValue({
+        content: [{ type: 'tool_use', id: 'toolu_1', name: 'create_workflow_request', input: {} }],
+      })
+      ;(createAnthropicClient as Mock).mockReturnValue({ messages: { create: mockCreate } })
+
+      // Manually set an expired pending confirmation
+      const { insertWorkflow } = await import('./db.js')
+      const workflow = {
+        id: 'wf_test',
+        name: 'Test',
+        description: 'test',
+        trigger: { type: 'manual' as const },
+        steps: [],
+        failure_policy: { on_step_failure: 'stop' as const, max_retries: 0, retry_delay_ms: 5000 },
+        phase: 'awaiting_confirmation' as const,
+        schema_version: '1.0' as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      insertWorkflow(db, workflow)
+
+      // Access private pendingConfirmations via any cast
+      const routerAny = router as any
+      routerAny.pendingConfirmations.set('user1', {
+        workflowId: 'wf_test',
+        workflow,
+        expiresAt: Date.now() - 1000, // Already expired
+      })
+
+      await router.handleInbound('test', 'user1', { text: 'yes', sender: 'user1' })
+      expect(channel.sentMessages[0]!.text).toContain('expired')
+    })
+  })
+
+  describe('disconnectAll', () => {
+    it('disconnects all registered channels', async () => {
+      const channel2 = createMockChannel('test2')
+      router.registerChannel(channel2)
+
+      await router.disconnectAll()
+      expect(channel.disconnect).toHaveBeenCalledOnce()
+      expect(channel2.disconnect).toHaveBeenCalledOnce()
+    })
+  })
+
   describe('handleCallbackAction', () => {
     it('maps confirm action to yes and handles confirmation', async () => {
       // Set up a pending confirmation first

@@ -2,15 +2,19 @@
 
 import { Command } from 'commander'
 import { createInterface } from 'node:readline'
+import { createRequire } from 'node:module'
 import { loadConfig, ensureCueclawHome, createDefaultConfig, cueclawHome } from './config.js'
 import { initDb, listWorkflows, insertWorkflow, getWorkflow, updateWorkflowPhase, deleteWorkflow, getWorkflowRunsByWorkflowId, getStepRunsByRunId } from './db.js'
 import { loadSecrets } from './env.js'
 import { logger } from './logger.js'
 
+const require = createRequire(import.meta.url)
+const { version: pkgVersion } = require('../package.json') as { version: string }
+
 const program = new Command()
   .name('cueclaw')
   .description('Orchestrate agent workflows with natural language')
-  .version('0.0.1')
+  .version(pkgVersion)
 
 // ─── info ───
 
@@ -388,7 +392,17 @@ const daemonCmd = program.command('daemon').description('Manage background daemo
 daemonCmd.command('start')
   .option('--detach', 'Run in background')
   .description('Start the daemon')
-  .action(async () => {
+  .action(async (opts: { detach?: boolean }) => {
+    if (opts.detach) {
+      const { spawn } = await import('node:child_process')
+      const child = spawn(process.execPath, [process.argv[1]!, 'daemon', 'start'], {
+        detached: true,
+        stdio: 'ignore',
+      })
+      child.unref()
+      console.log(`Daemon started in background (PID ${child.pid})`)
+      return
+    }
     try {
       const { startDaemon } = await import('./daemon.js')
       await startDaemon()
@@ -414,6 +428,23 @@ daemonCmd.command('stop')
       console.log(`Failed to stop daemon: ${result.error}`)
       process.exit(1)
     }
+  })
+
+daemonCmd.command('restart')
+  .description('Restart the daemon')
+  .action(async () => {
+    const { getServiceStatus, stopService } = await import('./service.js')
+    const status = getServiceStatus()
+    if (status === 'running') {
+      const result = stopService()
+      if (!result.success) {
+        console.log(`Failed to stop daemon: ${result.error}`)
+        process.exit(1)
+      }
+      console.log('Daemon stopped.')
+    }
+    const { startDaemon } = await import('./daemon.js')
+    await startDaemon()
   })
 
 daemonCmd.command('install')

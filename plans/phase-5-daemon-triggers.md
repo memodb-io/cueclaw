@@ -31,14 +31,14 @@ Phase 5 adds the "always-on" layer — the daemon loop, trigger evaluation, and 
 
 ## Tasks
 
-### 5.1 Daemon Mode (`src/cli.ts` + `src/index.ts`)
+### 5.1 Daemon Mode (`src/cli.ts` + `src/daemon.ts`)
 
-The daemon is the same Node.js process, started with `cueclaw daemon start` or by the OS service manager.
+The daemon is the same Node.js process, started with `cueclaw daemon start` or by the OS service manager. The `startDaemon()` function is defined in `src/daemon.ts` and re-exported from `src/index.ts`.
 
-- [ ] `cueclaw daemon start [--detach]` — start the daemon process (foreground for debugging, or `--detach` for background)
-- [ ] `cueclaw daemon stop` — gracefully stop the daemon
-- [ ] `cueclaw daemon restart` — stop + start
-- [ ] `cueclaw daemon install` — register OS system service (launchd/systemd)
+- [x] `cueclaw daemon start [--detach]` — start the daemon process (foreground, or `--detach` for background)
+- [x] `cueclaw daemon stop` — gracefully stop the daemon
+- [x] `cueclaw daemon restart` — stop + start
+- [x] `cueclaw daemon install` — register OS system service (launchd/systemd)
 - [ ] `cueclaw daemon uninstall` — remove OS system service
 - [ ] `cueclaw daemon status` — check if daemon is running
 - [ ] `cueclaw daemon logs` — tail the daemon log file
@@ -46,7 +46,7 @@ The daemon is the same Node.js process, started with `cueclaw daemon start` or b
 - [ ] On shutdown: graceful — stop accepting new triggers, wait for running steps to complete, disconnect Channels
 
 ```typescript
-// src/index.ts — daemon main loop
+// src/daemon.ts — daemon main loop
 export async function startDaemon(config: CueclawConfig) {
   const db = initDb()
   const router = new MessageRouter()
@@ -82,7 +82,7 @@ No custom PID file management — delegate to OS-level service managers.
 
 - [ ] `cueclaw daemon install` generates `~/Library/LaunchAgents/com.cueclaw.plist` and runs `launchctl load`
 - [ ] `cueclaw daemon uninstall` runs `launchctl unload` and deletes the plist
-- [ ] `cueclaw daemon restart` uses `launchctl kickstart -k`
+- [x] `cueclaw daemon restart` — stop + start (use `launchctl kickstart -k` manually if needed)
 - [ ] `KeepAlive: true` for automatic crash restart
 - [ ] Stdout/stderr redirect to `~/.cueclaw/logs/daemon.log`
 
@@ -327,11 +327,11 @@ async function recoverRunningWorkflows(db: Database, router: MessageRouter) {
 
 ### 5.7 Logging System
 
-- [ ] Daemon log: `~/.cueclaw/logs/daemon.log` — main process events, trigger evaluations, errors
-- [ ] Execution logs: `~/.cueclaw/logs/executions/{workflow_id}_{date}.log` — per-run detailed logs
-- [ ] Log rotation: configurable max file size, keep last N files
-- [ ] `cueclaw daemon logs` tails the daemon log with `pino-pretty` formatting
-- [ ] Child loggers with context: `logger.child({ workflowId, runId, stepId })`
+- [x] Daemon log: `~/.cueclaw/logs/daemon.log` — main process events, trigger evaluations, errors
+- [ ] ~~Execution logs: `~/.cueclaw/logs/executions/{workflow_id}_{date}.log`~~ — NOT IMPLEMENTED (all logging goes to daemon.log)
+- [ ] ~~Log rotation~~ — NOT IMPLEMENTED
+- [x] `cueclaw daemon logs` tails the daemon log with `pino-pretty` formatting
+- [x] Child loggers with context: `logger.child({ workflowId, runId, stepId })`
 
 ### 5.8 Workflow State Persistence
 
@@ -356,32 +356,16 @@ async function recoverRunningWorkflows(db: Database, router: MessageRouter) {
 
 When `on_step_failure: 'ask_user'` triggers during unattended daemon execution:
 
-1. Send notification to all connected Channels with the failure details and options (retry / skip / stop)
-2. Wait up to `ask_user_timeout` (default: 1 hour, configurable in `config.yaml`)
-3. If user responds within timeout → execute their choice
-4. If timeout expires → fall back to `stop` behavior (halt execution, mark remaining steps as skipped)
-5. Log the timeout event with workflow/run/step context
+1. Executor calls the `onStepFailure()` callback with failure details
+2. Callback returns user's choice: `'retry'` / `'skip'` / `'stop'`
+3. ~~Timeout mechanism~~ — NOT IMPLEMENTED (waits indefinitely for callback response)
+
+**Future enhancement:** Add configurable `ask_user_timeout` (e.g., 1 hour) that falls back to `stop` behavior if no user response.
 
 ```typescript
-const ASK_USER_TIMEOUT = config.executor?.ask_user_timeout ?? 3_600_000  // 1 hour
-
-async function handleAskUser(step: PlanStep, error: string, router: MessageRouter): Promise<'retry' | 'skip' | 'stop'> {
-  // broadcastNotification sends to all Channels; waitForConfirmation is added to
-  // MessageRouter as part of Phase 5 to support interactive failure recovery.
-  await router.broadcastNotification(
-    `Step "${step.id}" failed: ${error}\nOptions: retry / skip / stop`
-  )
-
-  const response = await Promise.race([
-    router.waitForConfirmation(step.id),
-    new Promise<'stop'>(resolve => setTimeout(() => resolve('stop'), ASK_USER_TIMEOUT)),
-  ])
-
-  if (response === 'stop') {
-    logger.warn({ stepId: step.id }, 'ask_user timed out, falling back to stop')
-  }
-  return response
-}
+// Current implementation in executor.ts — no timeout
+const decision = await onStepFailure(step, error)
+// decision: 'retry' | 'skip' | 'stop'
 ```
 
 ---
@@ -398,7 +382,7 @@ async function handleAskUser(step: PlanStep, error: string, router: MessageRoute
 - [ ] Per-workflow queueing prevents concurrent runs of the same workflow
 - [ ] Crash recovery marks interrupted runs as failed and notifies users
 - [ ] All active triggers re-register after daemon restart
-- [ ] Execution logs are written to per-run log files
+- [ ] ~~Execution logs are written to per-run log files~~ — NOT IMPLEMENTED (all logging goes to daemon.log)
 - [ ] Graceful shutdown waits for running agents to complete
 
 ---

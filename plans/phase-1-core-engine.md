@@ -182,10 +182,9 @@ export function validateDAG(steps: PlanStep[]): string[] {
 
 ### 1.3 Plan Confirmation Flow
 
-- [ ] `confirmPlan(workflow)` — marks all steps as `confirmed`, transitions phase to `awaiting_confirmation` → `executing`
-- [ ] `rejectPlan(workflowId)` — deletes or archives the workflow
-- [ ] Persist workflow to SQLite upon confirmation
-- [ ] Generate unique workflow ID (`wf_` prefix + nanoid)
+- [x] `confirmPlan(workflow)` — pure transformation: transitions phase to `'active'` (poll/cron) or `'executing'` (manual). Does NOT persist to DB — callers handle persistence.
+- [x] `rejectPlan(workflow)` — returns workflow with phase reset to `'planning'` (does not delete from DB)
+- [x] Generate unique workflow ID (`wf_` prefix + nanoid) at plan generation time (not at confirmation)
 
 For now this is called programmatically. Phase 3 (TUI) and Phase 4 (Bot) add the interactive confirmation UI.
 
@@ -377,50 +376,20 @@ async function executeStepWithRetry(
 
 **Step cancellation:**
 
-The Executor maintains a `Map<string, Query>` of all running query objects. On user cancel (Ctrl+C, Bot command, API call), the Executor calls `query.interrupt()` for all active queries. The SDK's `interrupt()` method cleanly terminates the in-flight conversation. Container mode still uses `docker stop` for cancellation (Phase 2).
-
-**Important:** The query reference must be registered *before* iteration begins — not after `for await` completes (by then the query is finished). `runAgent()` returns a handle containing `queryRef` that the Executor registers immediately, while result resolution happens asynchronously.
+`runAgent()` returns an `AgentHandle` with an `abort()` function. In local mode, `abort()` sets an internal flag checked inside the `for await` loop. In container mode, `abort()` calls `docker stop`. The `Query` object is not exposed to the Executor — cancellation is abstracted behind the `abort` callback.
 
 ```typescript
-// Executor stores the query object reference per step
-const activeQueries = new Map<string, Query>()
+interface AgentHandle {
+  resultPromise: Promise<StepRunResult>
+  abort: () => void
+}
 
-// Register query ref BEFORE iterating — so it's available for cancellation during execution
+// Executor receives the handle and can call abort() for cancellation
 async function executeStep(step, resolvedInputs, runId, db) {
-  const { resultPromise, queryRef } = runAgent({ ... })
-  activeQueries.set(step.id, queryRef)      // Register immediately
-  const result = await resultPromise         // Wait for completion
-  activeQueries.delete(step.id)             // Cleanup after done
+  const { resultPromise, abort } = runAgent({ ... })
+  // abort() can be called from signal handler or user action
+  const result = await resultPromise
   return result
-}
-
-// Cancel all running steps
-function cancelAll() {
-  for (const [stepId, q] of activeQueries) {
-    q.interrupt()
-    activeQueries.delete(stepId)
-  }
-}
-```
-
-Correspondingly, `runAgent()` should return the query object synchronously alongside a result promise:
-
-```typescript
-export function runAgent(opts: { ... }): { queryRef: Query; resultPromise: Promise<StepRunResult> } {
-  const q = query({ prompt: opts.prompt, options: { ... } })
-
-  const resultPromise = (async () => {
-    let sessionId: string | undefined
-    let result: string | null = null
-    for await (const message of q) {
-      if (message.type === 'system' && message.subtype === 'init') sessionId = message.session_id
-      if ('result' in message) result = message.result ?? null
-      opts.onProgress?.(message)
-    }
-    return { result, sessionId }
-  })()
-
-  return { queryRef: q, resultPromise }
 }
 ```
 
@@ -434,46 +403,39 @@ Wraps the Claude Agent SDK `query()` call. In Phase 0–4, agents run locally (n
 - [ ] Verify `model` option support in Claude Agent SDK before implementation; if not supported, use environment variable or SDK config
 - [ ] Stream messages for progress tracking
 - [ ] Extract `session_id` from init message and `result` from result message (via `"result" in message` check)
-- [ ] Use sync-return pattern: return `{ queryRef, resultPromise }` so Executor can register queryRef immediately for cancellation
+- [x] Return `AgentHandle { resultPromise, abort }` — `abort()` function for cancellation instead of exposing `queryRef`
 - [ ] Return structured `StepRunResult` (from resultPromise)
 - [ ] Accept `workflowId`, `stepId`, `runId` params (optional in Phase 1, required by Phase 2)
 
 ```typescript
-import { query, type Query } from '@anthropic-ai/claude-agent-sdk'
+import { query } from '@anthropic-ai/claude-agent-sdk'
 
-// Note: runAgent uses the sync-return pattern (see section 1.4 above) that returns
-// { queryRef, resultPromise } — the queryRef is available immediately for cancellation.
-// Verify `model` option support in Claude Agent SDK before implementation.
-// If SDK does not support `model` in options, use environment variable or SDK config.
-
-export function runAgent(opts: {
+export async function runAgent(opts: {
   prompt: string
   cwd: string
-  workflowId?: string               // Optional in Phase 1, required by Phase 2
+  config: CueclawConfig
+  workflowId?: string
   stepId?: string
   runId?: string
   sessionId?: string
   allowedTools?: string[]
   onProgress?: (msg: any) => void
-}): { queryRef: Query; resultPromise: Promise<StepRunResult> } {
-  const config = loadConfig()
+}): Promise<AgentHandle> {
+  const permMode = config.claude.executor.skip_permissions
+    ? 'dangerously-skip-permissions' : 'default'
+  let aborted = false
   const q = query({
     prompt: opts.prompt,
     options: {
       cwd: opts.cwd,
+      model: opts.config.claude.executor.model,
       resume: opts.sessionId,
       allowedTools: opts.allowedTools ?? [
         'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
-        'WebSearch', 'WebFetch', 'Task', 'TaskOutput',
+        'WebSearch', 'WebFetch',
       ],
       settingSources: ['project'],
-      permissionMode: 'default',
-      hooks: {
-        PreToolUse: [{
-          matcher: 'Bash',
-          hooks: [localSafetyGuard],
-        }],
-      },
+      permissionMode: permMode,
     },
   })
 
@@ -482,21 +444,27 @@ export function runAgent(opts: {
     let result: string | null = null
     for await (const message of q) {
       if (message.type === 'system' && message.subtype === 'init') sessionId = message.session_id
+      // Inline bash safety check (not SDK hook)
+      if (message.type === 'assistant' && message.tool_use?.name === 'Bash') {
+        const { allowed, reason } = checkBashSafety(message.tool_use.input.command)
+        if (!allowed) { /* abort step */ }
+      }
       if ('result' in message) result = message.result ?? null
       opts.onProgress?.(message)
+      if (aborted) break
     }
     return { status: 'succeeded' as StepStatus, output: result, sessionId }
   })()
 
-  return { queryRef: q, resultPromise }
+  return { resultPromise, abort: () => { aborted = true } }
 }
 ```
 
 ### 1.6 Hooks (`src/hooks.ts`)
 
-- [ ] `localSafetyGuard` — PreToolUse hook for Bash commands in local (non-Docker) execution
+- [x] `checkBashSafety(command)` — plain function (not SDK hook) that checks bash commands against dangerous patterns
+  - Called inline inside the agent-runner's `for await` loop, not registered as a PreToolUse SDK hook
   - Block dangerous patterns: `rm -rf /`, `sudo`, `chmod 777`, etc.
-  - Verify file operations stay within allowed directories
 - [ ] Future: `sanitizeBashSecrets` — strip API keys from Bash environment (for container mode)
 
 ```typescript

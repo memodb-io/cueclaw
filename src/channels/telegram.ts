@@ -112,7 +112,8 @@ export class TelegramChannel implements Channel {
     return /^-?\d+$/.test(jid)
   }
 
-  async setTyping(jid: string, _isTyping: boolean): Promise<void> {
+  async setTyping(jid: string, isTyping: boolean): Promise<void> {
+    if (!isTyping) return // Telegram typing auto-expires; nothing to do
     try {
       await this.bot.api.sendChatAction(Number(jid), 'typing')
     } catch {

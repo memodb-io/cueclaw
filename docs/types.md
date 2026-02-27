@@ -192,6 +192,21 @@ Rules:
 - Use `dagre` ([npmjs.com/package/dagre](https://www.npmjs.com/package/dagre)) or `elkjs` ([npmjs.com/package/elkjs](https://www.npmjs.com/package/elkjs)) for layout computation — no custom implementation needed
 - Framework injects position before storing in SQLite / returning to UI
 
+## Session Type
+
+Per-step session for agent execution and resume:
+
+```typescript
+interface Session {
+  id: string                      // Unique session ID
+  step_run_id: string             // Bound to a specific step run
+  sdk_session_id?: string         // Claude Agent SDK session ID for resume
+  created_at: string              // ISO 8601
+  last_used_at: string            // ISO 8601
+  is_active: boolean              // false after step completes or fails
+}
+```
+
 ## Planner Session Types
 
 Multi-turn conversation types for iterative workflow creation (`src/planner-session.ts`):

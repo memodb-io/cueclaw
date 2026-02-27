@@ -91,7 +91,7 @@ steps:
 1. [ ] Submit the workflow description via TUI
 2. [ ] Verify Planner generates a reasonable plan with poll trigger and 3–4 steps
 3. [ ] Confirm the plan
-4. [ ] Verify workflow appears in `cueclaw list` with `executing` phase
+4. [ ] Verify workflow appears in `cueclaw list` with `active` phase (poll trigger → `active`, not `executing`)
 5. [ ] Assign an issue to `tiangeng` in the test repo
 6. [ ] Wait for the poll trigger to detect the change (up to 60s)
 7. [ ] Verify each step executes in order:
@@ -264,14 +264,14 @@ export const mockPlannerOutput: PlannerOutput = {
 | **$steps.{id}.output resolution** | mock agent runner: step-a returns "result-a" | step-b receives inputs containing "result-a" |
 | **Failure policy: stop** | mock agent runner: step-a returns failed | step-b and step-c status is skipped |
 | **DB persistence** | in-memory SQLite | workflow_runs and step_runs written correctly |
-| **Plan confirmation flow** | mock planner returns mockPlannerOutput | confirm → phase becomes executing, reject → deleted |
+| **Plan confirmation flow** | mock planner returns mockPlannerOutput | confirm → phase becomes `active` (poll/cron) or `executing` (manual), reject → phase becomes `planning` |
 | **Trigger evaluation** | mock `execScript` returns changing stdout | trigger correctly detects diff and fires execution |
 
 ### Running Tests
 
 ```bash
-pnpm test                          # Unit tests (fast, no external deps)
-pnpm test:integration              # Integration tests (mock agent runner, in-memory DB)
+pnpm test                          # All tests including integration (fast, no external deps, in-memory DB)
+pnpm test:watch                    # Watch mode for development
 # Manual validation uses real GitHub API — not automated
 ```
 

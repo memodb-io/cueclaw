@@ -14,8 +14,8 @@
 | **DB** | Schema, CRUD, migrations | None (use `:memory:` DB) | `db.test.ts`: insertWorkflow → getWorkflow assert consistency |
 | **Planner** | Output Workflow JSON is structurally valid | Anthropic SDK `client.messages.create` returns fixed tool_use response | `planner.test.ts`: mock LLM response → verify Zod parse passes, DAG is acyclic |
 | **Executor** | DAG scheduling order, parallel execution, dependency resolution, failure policy | `agent-runner.ts` entire module (returns fixed output) | `executor.test.ts`: 3-step DAG → verify parallel execution, skip logic |
-| **Agent Runner** | query() call parameters, session resume, timeout handling | `@anthropic-ai/claude-agent-sdk`'s `query()` | `agent-runner.test.ts`: mock query() → verify session ID passing |
-| **Channels** | Message send/receive, formatting, reconnection logic | Third-party SDKs (baileys / grammy) | `whatsapp.test.ts`: mock Baileys → verify sendMessage calls |
+| **Agent Runner** | query() call parameters, session resume, timeout handling | `@anthropic-ai/claude-agent-sdk`'s `query()` | Covered by `executor.test.ts` and `integration.test.ts` (agent-runner module-mocked) |
+| **Channels** | Message send/receive, formatting, reconnection logic | Third-party SDKs (baileys / grammy) | `telegram.test.ts`: mock grammy → verify sendMessage, inline keyboards |
 | **Config** | YAML loading, priority chain, Zod validation | `fs.readFileSync` (returns fixed YAML) | `config.test.ts`: various YAML inputs → verify merge behavior |
 | **TUI** | Ink component rendering, slash commands | `ink-testing-library` render utility | `chat.test.tsx`, `renderers.test.tsx`, `commands.test.ts` |
 | **Planner Session** | Multi-turn conversation, tool responses | Anthropic SDK `client.messages.create` | `planner-session.test.ts`: ask_question/set_secret/create_workflow flows |
@@ -123,38 +123,55 @@ export function _initTestDatabase(): Database.Database {
 
 ## CI Configuration
 
+Single workflow (`.github/workflows/ci.yml`) runs on push to `main` and all PRs:
+
 ```yaml
-# .github/workflows/test.yml
-name: Test
+# .github/workflows/ci.yml
+name: CI
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      - run: pnpm build
       - run: pnpm test
+  lint:
+    runs-on: ubuntu-latest
+    steps: ...  # eslint
+  typecheck:
+    runs-on: ubuntu-latest
+    steps: ...  # tsc --noEmit
+  changeset:
+    if: github.event_name == 'pull_request'
+    steps: ...  # warn if changeset missing
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: [test, lint, typecheck]
+    steps: ...  # changesets publish with provenance
 ```
 
 ## Running Tests
 
 ```bash
-pnpm test                          # Unit tests (fast, no external deps)
-pnpm test:integration              # Integration tests (mock agent runner, in-memory DB)
+pnpm test                          # All tests (fast, no external deps, in-memory DB)
+pnpm test:watch                    # Watch mode for development
 # Manual validation uses real GitHub API — not automated
 ```
 
 ## Test Files
 
-23 test files covering ~177 tests:
+23 test files covering ~188 tests:
 
 ```
 src/

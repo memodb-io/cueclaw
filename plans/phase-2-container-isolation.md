@@ -433,11 +433,11 @@ export class McpMessageHandler {
 }
 ```
 
-### 2.5 CueClaw MCP Server — Container Side (`container/agent-runner/src/ipc-mcp-stdio.ts`)
+### 2.5 Container IPC Helpers (`container/agent-runner/src/ipc-mcp-stdio.ts`)
 
-MCP server running inside the container, providing CueClaw tools to the agent.
+> **Implementation note:** The actual implementation uses plain exported async functions (not a real MCP server). The `@modelcontextprotocol/sdk` is not used. Functions are called directly by the container agent runner, not via MCP protocol.
 
-- [ ] Uses `@modelcontextprotocol/sdk` with stdio transport
+- [x] Plain exported functions (not MCP server): `reportProgress()`, `notify()`, `getContext()`
 - [ ] Reads context from environment: `CUECLAW_WORKFLOW_ID`, `CUECLAW_STEP_ID`, `CUECLAW_RUN_ID`
 - [ ] Atomic file writes to IPC output directory (temp file → rename)
 - [ ] Tools:
@@ -693,16 +693,17 @@ echo "Container image built: cueclaw-agent:latest"
 }
 ```
 
-### 2.8 Setup CLI (`setup/`)
+### 2.8 Setup CLI (`src/setup-*.ts`)
+
+> **Implementation note:** Setup files are flat in `src/` (not a `setup/` subdirectory), following the project's flat layout convention.
 
 First-run setup wizard accessible via `cueclaw setup`.
 
-- [ ] `setup/index.ts` — orchestrates all setup steps
-- [ ] `setup/environment.ts` — check Docker installed (`docker --version`) and running (`docker info`)
-- [ ] `setup/container.ts` — build container image (`container/build.sh`)
-- [ ] `setup/auth.ts` — validate API key works (test API call), check bot tokens if configured
-- [ ] `setup/service.ts` — check/install system service (launchd/systemd)
-- [ ] `setup/verify.ts` — smoke test: spawn container, execute simple query, verify IPC round-trip
+- [x] `src/setup.ts` — orchestrates all setup steps (`runSetup(config, projectRoot)`)
+- [x] `src/setup-environment.ts` — check Docker installed (`docker --version`) and running (`docker info`)
+- [x] `src/setup-container.ts` — build container image (`container/build.sh`)
+- [x] `src/setup-auth.ts` — validate API key works (test API call)
+- [x] `src/setup-verify.ts` — smoke test: spawn container, verify Node.js runs
 - [ ] Register `cueclaw setup` command in CLI
 
 ```typescript

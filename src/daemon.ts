@@ -62,16 +62,17 @@ export async function startDaemon(): Promise<void> {
   logger.info('Daemon started')
 
   // Graceful shutdown
-  const shutdown = () => {
+  const shutdown = async () => {
     logger.info('Shutting down daemon...')
     triggerLoop.stop()
     router.stop()
+    await router.disconnectAll()
     db.close()
     process.exit(0)
   }
 
-  process.on('SIGTERM', shutdown)
-  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', () => void shutdown())
+  process.on('SIGINT', () => void shutdown())
 }
 
 /**

@@ -55,9 +55,9 @@ export class TriggerLoop {
     const trigger = workflow.trigger
 
     if (trigger.type === 'poll') {
-      const interval = setInterval(() => {
+      const interval = setInterval(async () => {
         try {
-          const result = evaluatePollTrigger(workflow, trigger, this.db)
+          const result = await evaluatePollTrigger(workflow, trigger, this.db)
           if (result) {
             this.executeTrigger(workflow, result.data)
           }

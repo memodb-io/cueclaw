@@ -126,7 +126,7 @@ export class MessageRouter {
 - [ ] Implement `Channel` interface: `connect()`, `sendMessage()`, `disconnect()`, etc.
 - [ ] `OnInboundMessage` callback on new message events
 - [ ] Handle both private chats and groups
-- [ ] Outbound message queue with rate limiting (avoid WhatsApp throttling)
+- [ ] ~~Outbound message queue with rate limiting~~ — NOT IMPLEMENTED (rate limiting handled at MessageRouter level, not per-channel)
 - [ ] Group metadata sync with 24h cache
 - [ ] `setTyping()` — show typing indicator while agent executes
 - [ ] Reconnection logic with exponential backoff
@@ -167,7 +167,7 @@ export class WhatsAppChannel implements Channel {
 ### 4.3 Telegram Channel (`src/channels/telegram.ts`)
 
 - [ ] Initialize grammy bot with token from config
-- [ ] Polling mode for development, webhook mode configurable for production
+- [x] Polling mode only (`bot.start()` long polling) — webhook mode not implemented
 - [ ] Implement `Channel` interface
 - [ ] `OnInboundMessage` callback on new message events
 - [ ] **Inline Keyboard** for plan confirmation — buttons: Confirm, Modify, Cancel
@@ -243,7 +243,7 @@ For WhatsApp (no slash command support), prefix with `!` instead: `!new`, `!list
 - [ ] Telegram: inline keyboard buttons for confirm/modify/cancel
 - [ ] WhatsApp: react-based confirmation (reply with "yes"/"no"/"modify") or numbered options
 - [ ] Modify flow: bot asks for modification description → sends to Planner → re-sends updated plan
-- [ ] Timeout: if no confirmation within configurable period, auto-cancel with notification
+- [x] Timeout: 10-minute confirmation timeout in MessageRouter (expired confirmations are cleared)
 
 ```
 Bot:  📋 Workflow: GitHub Issue Auto PR
@@ -269,9 +269,9 @@ Bot:  📋 Workflow: GitHub Issue Auto PR
 
 ### 4.7 Bot Lifecycle CLI Commands
 
-- [ ] `cueclaw bot start` — start all enabled Bot Channels
-- [ ] `cueclaw bot status` — show connection status of each Channel
-- [ ] `cueclaw bot config` — interactive setup (WhatsApp QR scan / Telegram token entry)
+- [x] `cueclaw bot start` — start all enabled Bot Channels
+- [x] `cueclaw bot status` — show connection status of each Channel
+- [ ] ~~`cueclaw bot config`~~ — NOT IMPLEMENTED (setup handled via `cueclaw setup` and config.yaml editing)
 
 ---
 

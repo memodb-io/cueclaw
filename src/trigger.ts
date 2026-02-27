@@ -1,7 +1,10 @@
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import type Database from 'better-sqlite3'
 import type { Workflow, TriggerConfig } from './types.js'
 import { logger } from './logger.js'
+
+const execFileAsync = promisify(execFile)
 
 export interface TriggerResult {
   workflowId: string
@@ -14,17 +17,18 @@ const CHECK_SCRIPT_TIMEOUT = 30_000
  * Evaluate a workflow's poll trigger.
  * Executes check_script, compares output to last result, returns trigger data if changed.
  */
-export function evaluatePollTrigger(
+export async function evaluatePollTrigger(
   workflow: Workflow,
   trigger: Extract<TriggerConfig, { type: 'poll' }>,
   db: Database.Database,
-): TriggerResult | null {
+): Promise<TriggerResult | null> {
   let stdout: string
   try {
-    stdout = execFileSync('sh', ['-c', trigger.check_script], {
+    const result = await execFileAsync('sh', ['-c', trigger.check_script], {
       timeout: CHECK_SCRIPT_TIMEOUT,
       encoding: 'utf-8',
-    }).trim()
+    })
+    stdout = result.stdout.trim()
   } catch (err) {
     logger.error({ workflowId: workflow.id, err }, 'Poll check_script failed')
     db.prepare(

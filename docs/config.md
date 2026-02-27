@@ -78,16 +78,17 @@ claude:
 ## CLI Commands
 
 ```bash
-cueclaw new                     # Interactive workflow creation (enter TUI)
+cueclaw new <description>       # Generate workflow from natural language description
 cueclaw list                    # List all workflows
 cueclaw status [workflow-id]    # View workflow status
 cueclaw pause <workflow-id>     # Pause workflow
 cueclaw resume <workflow-id>    # Resume workflow
 cueclaw delete <workflow-id>    # Delete workflow
 
-cueclaw daemon start [--detach]  # Start daemon (foreground or background)
+cueclaw daemon start             # Start daemon (foreground)
+cueclaw daemon start --detach    # Start daemon in background
 cueclaw daemon stop              # Gracefully stop daemon
-cueclaw daemon restart           # Stop + start
+cueclaw daemon restart           # Stop + start daemon
 cueclaw daemon install           # Register OS system service (launchd/systemd)
 cueclaw daemon uninstall         # Remove OS system service
 cueclaw daemon status            # View service status
@@ -96,8 +97,7 @@ cueclaw daemon logs              # View logs (tail -f)
 cueclaw info                    # Show current config, SDK version, etc.
 
 cueclaw bot start               # Start all configured Bot Channels
-cueclaw bot status              # View Channel connection status
-cueclaw bot config              # Configure Bot (WhatsApp auth / Telegram token)
+cueclaw bot status              # View Channel connection status (config-level)
 
 cueclaw tui                     # Start interactive TUI (default command)
 cueclaw                         # Equivalent to cueclaw tui
