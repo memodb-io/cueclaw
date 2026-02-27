@@ -1,9 +1,84 @@
 import type Database from 'better-sqlite3'
+import { writeFileSync, unlinkSync, readFileSync, openSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { spawn } from 'node:child_process'
 import { initDb } from './db.js'
-import { loadConfig } from './config.js'
+import { loadConfig, cueclawHome } from './config.js'
 import { MessageRouter } from './router.js'
 import { TriggerLoop } from './trigger-loop.js'
 import { logger } from './logger.js'
+
+/** Path to the daemon PID file */
+export function daemonPidPath(): string {
+  return join(cueclawHome(), 'daemon.pid')
+}
+
+/** Write daemon PID file */
+export function writePidFile(pid: number): void {
+  writeFileSync(daemonPidPath(), String(pid), 'utf-8')
+}
+
+/** Remove daemon PID file */
+export function removePidFile(): void {
+  try { unlinkSync(daemonPidPath()) } catch { /* may not exist */ }
+}
+
+/** Read daemon PID from file, or null if not found */
+export function readPidFile(): number | null {
+  try {
+    const content = readFileSync(daemonPidPath(), 'utf-8').trim()
+    const pid = Number(content)
+    return Number.isFinite(pid) && pid > 0 ? pid : null
+  } catch {
+    return null
+  }
+}
+
+/** Check if a process with the given PID is alive */
+export function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Check if an external daemon is running (via PID file or system service) */
+export function isDaemonRunning(): boolean {
+  const pid = readPidFile()
+  if (pid && isProcessAlive(pid)) return true
+  return false
+}
+
+/**
+ * Spawn a detached daemon process in the background.
+ * Passes process.execArgv so tsx/loader flags carry over (dev mode).
+ * Redirects output to daemon.log for debuggability.
+ * Returns the child PID, or null on failure.
+ */
+export function spawnDaemonProcess(): number | null {
+  const logDir = join(cueclawHome(), 'logs')
+  mkdirSync(logDir, { recursive: true })
+  const logPath = join(logDir, 'daemon.log')
+  const logFd = openSync(logPath, 'a')
+
+  const child = spawn(
+    process.execPath,
+    [...process.execArgv, process.argv[1]!, 'daemon', 'start', '--foreground'],
+    {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+    },
+  )
+  child.unref()
+
+  if (child.pid) {
+    writePidFile(child.pid)
+    return child.pid
+  }
+  return null
+}
 
 /**
  * Start the CueClaw daemon.
@@ -63,9 +138,13 @@ export async function startDaemon(): Promise<void> {
 
   logger.info('Daemon started')
 
+  // Write PID file for daemon management
+  writePidFile(process.pid)
+
   // Graceful shutdown
   const shutdown = async () => {
     logger.info('Shutting down daemon...')
+    removePidFile()
     triggerLoop.stop()
     router.stop()
     await router.disconnectAll()

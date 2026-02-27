@@ -409,25 +409,32 @@ program.command('delete')
 const daemonCmd = program.command('daemon').description('Manage background daemon')
 
 daemonCmd.command('start')
-  .option('--detach', 'Run in background')
-  .description('Start the daemon')
-  .action(async (opts: { detach?: boolean }) => {
-    if (opts.detach) {
-      const { spawn } = await import('node:child_process')
-      const child = spawn(process.execPath, [process.argv[1]!, 'daemon', 'start'], {
-        detached: true,
-        stdio: 'ignore',
-      })
-      child.unref()
-      logger.info({ pid: child.pid }, 'Daemon detached in background')
-      console.log(`Daemon started in background (PID ${child.pid})`)
+  .option('--foreground', 'Run in foreground (for system services)')
+  .description('Start the daemon (runs in background by default)')
+  .action(async (opts: { foreground?: boolean }) => {
+    if (opts.foreground) {
+      // Foreground mode: used by system services (launchd/systemd)
+      try {
+        const { startDaemon } = await import('./daemon.js')
+        await startDaemon()
+      } catch (err) {
+        logger.error({ err }, 'Daemon failed')
+        process.exit(1)
+      }
       return
     }
-    try {
-      const { startDaemon } = await import('./daemon.js')
-      await startDaemon()
-    } catch (err) {
-      logger.error({ err }, 'Daemon failed')
+    // Default: background mode (detach)
+    const { isDaemonRunning, spawnDaemonProcess } = await import('./daemon.js')
+    if (isDaemonRunning()) {
+      console.log('Daemon is already running.')
+      return
+    }
+    const pid = spawnDaemonProcess()
+    if (pid) {
+      logger.info({ pid }, 'Daemon detached in background')
+      console.log(`Daemon started in background (PID ${pid})`)
+    } else {
+      console.log('Failed to start daemon.')
       process.exit(1)
     }
   })
@@ -435,38 +442,71 @@ daemonCmd.command('start')
 daemonCmd.command('stop')
   .description('Stop the daemon')
   .action(async () => {
-    const { getServiceStatus, stopService } = await import('./service.js')
-    const status = getServiceStatus()
-    if (status !== 'running') {
-      console.log('Daemon is not running.')
+    const { readPidFile, isProcessAlive, removePidFile } = await import('./daemon.js')
+
+    // Try PID file first (covers detached daemon)
+    const pid = readPidFile()
+    if (pid && isProcessAlive(pid)) {
+      process.kill(pid, 'SIGTERM')
+      removePidFile()
+      logger.info({ pid }, 'Daemon stopped via PID file')
+      console.log(`Daemon stopped (PID ${pid}).`)
       return
     }
-    const result = stopService()
-    if (result.success) {
-      logger.info('Daemon stopped')
-      console.log('Daemon stopped.')
-    } else {
-      logger.error({ error: result.error }, 'Failed to stop daemon')
-      console.log(`Failed to stop daemon: ${result.error}`)
-      process.exit(1)
+
+    // Fall back to system service
+    const { getServiceStatus, stopService } = await import('./service.js')
+    const status = getServiceStatus()
+    if (status === 'running') {
+      const result = stopService()
+      if (result.success) {
+        logger.info('Daemon stopped via system service')
+        console.log('Daemon stopped.')
+      } else {
+        logger.error({ error: result.error }, 'Failed to stop daemon')
+        console.log(`Failed to stop daemon: ${result.error}`)
+        process.exit(1)
+      }
+      return
     }
+
+    // Clean up stale PID file if exists
+    if (pid) removePidFile()
+    console.log('Daemon is not running.')
   })
 
 daemonCmd.command('restart')
   .description('Restart the daemon')
   .action(async () => {
-    const { getServiceStatus, stopService } = await import('./service.js')
-    const status = getServiceStatus()
-    if (status === 'running') {
-      const result = stopService()
-      if (!result.success) {
-        console.log(`Failed to stop daemon: ${result.error}`)
-        process.exit(1)
+    const { readPidFile, isProcessAlive, removePidFile } = await import('./daemon.js')
+
+    // Stop existing daemon
+    const pid = readPidFile()
+    if (pid && isProcessAlive(pid)) {
+      process.kill(pid, 'SIGTERM')
+      removePidFile()
+      console.log(`Stopped daemon (PID ${pid}).`)
+    } else {
+      const { getServiceStatus, stopService } = await import('./service.js')
+      if (getServiceStatus() === 'running') {
+        const result = stopService()
+        if (!result.success) {
+          console.log(`Failed to stop daemon: ${result.error}`)
+          process.exit(1)
+        }
+        console.log('Stopped system service daemon.')
       }
-      console.log('Daemon stopped.')
     }
-    const { startDaemon } = await import('./daemon.js')
-    await startDaemon()
+
+    // Start new daemon in background
+    const { spawnDaemonProcess } = await import('./daemon.js')
+    const newPid = spawnDaemonProcess()
+    if (newPid) {
+      console.log(`Daemon restarted in background (PID ${newPid})`)
+    } else {
+      console.log('Failed to restart daemon.')
+      process.exit(1)
+    }
   })
 
 daemonCmd.command('install')
@@ -502,9 +542,24 @@ daemonCmd.command('uninstall')
 daemonCmd.command('status')
   .description('View daemon status')
   .action(async () => {
+    const { readPidFile, isProcessAlive } = await import('./daemon.js')
+
+    // Check PID file first
+    const pid = readPidFile()
+    if (pid && isProcessAlive(pid)) {
+      console.log(`Daemon status: running (PID ${pid})`)
+      return
+    }
+
+    // Fall back to system service
     const { getServiceStatus } = await import('./service.js')
     const status = getServiceStatus()
-    console.log(`Daemon status: ${status}`)
+    if (status === 'running') {
+      console.log(`Daemon status: running (system service)`)
+      return
+    }
+
+    console.log('Daemon status: stopped')
   })
 
 daemonCmd.command('logs')
@@ -525,48 +580,6 @@ daemonCmd.command('logs')
 // ─── Bot stubs ───
 
 const botCmd = program.command('bot').description('Manage bot channels')
-
-botCmd.command('start')
-  .description('Start all configured bot channels')
-  .action(async () => {
-    try {
-      const config = loadConfig()
-      const db = initDb()
-      const { MessageRouter } = await import('./router.js')
-      const router = new MessageRouter(db, config, process.cwd())
-
-      if (config.whatsapp?.enabled) {
-        const { WhatsAppChannel } = await import('./channels/whatsapp.js')
-        const wa = new WhatsAppChannel(
-          config.whatsapp.auth_dir ?? `${process.env['HOME']}/.cueclaw/auth/whatsapp`,
-          config.whatsapp.allowed_jids ?? [],
-          (jid, msg) => router.handleInbound('whatsapp', jid, msg),
-        )
-        router.registerChannel(wa)
-        await wa.connect()
-        logger.info('WhatsApp channel started')
-      }
-
-      if (config.telegram?.enabled) {
-        const { TelegramChannel } = await import('./channels/telegram.js')
-        const tg = new TelegramChannel(
-          config.telegram.token!,
-          config.telegram.allowed_users ?? [],
-          (jid, msg) => router.handleInbound('telegram', jid, msg),
-        )
-        router.registerChannel(tg)
-        await tg.connect()
-        tg.onCallback((wfId, action, chatId) => router.handleCallbackAction('telegram', chatId, wfId, action))
-        logger.info('Telegram channel started')
-      }
-
-      router.start()
-      console.log('Bot channels started. Press Ctrl+C to stop.')
-    } catch (err) {
-      logger.error({ err }, 'Failed to start bot channels')
-      process.exit(1)
-    }
-  })
 
 botCmd.command('status')
   .description('View channel connection status')
@@ -603,7 +616,7 @@ program.command('tui')
       const React = await import('react')
       const { render } = await import('ink')
       const { App } = await import('./tui/app.js')
-      render(React.createElement(App, { cwd: process.cwd(), skipOnboarding: opts.skipOnboarding }))
+      render(React.createElement(App, { cwd: process.cwd(), skipOnboarding: opts.skipOnboarding }), { exitOnCtrlC: false })
     } catch (err) {
       logger.error({ err }, 'Failed to start TUI')
       process.exit(1)
@@ -622,7 +635,7 @@ program
     const React = await import('react')
     const { render } = await import('ink')
     const { App } = await import('./tui/app.js')
-    render(React.createElement(App, { cwd: process.cwd(), skipOnboarding }))
+    render(React.createElement(App, { cwd: process.cwd(), skipOnboarding }), { exitOnCtrlC: false })
   } catch (err) {
     logger.error({ err }, 'Failed to start TUI')
     process.exit(1)
