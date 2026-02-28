@@ -4,7 +4,7 @@ Orchestrate agent workflows with natural language. Uses the Claude Agent SDK to 
 
 ## Project Status
 
-MVP implemented (Phases 0-6) with multi-turn planner, decomposed TUI (context/hook architecture), daemon bridge with PID file management, and channel-aware planner. ~309 tests across 33 test files.
+MVP implemented (Phases 0-6) with multi-turn planner, decomposed TUI (context/hook architecture), daemon bridge with PID file management, and channel-aware planner. ~316 tests across 33 test files.
 
 ## Key Concepts
 
