@@ -62,6 +62,18 @@ CueClaw supports third-party API proxies by setting `claude.base_url`:
 claude:
   api_key: sk-or-v1-xxxx          # Provider-specific API key
   base_url: https://openrouter.ai/api/v1
+  planner:
+    model: anthropic/claude-sonnet-4-6   # OpenRouter model names use provider prefix
+  executor:
+    model: anthropic/claude-sonnet-4-6
+```
+
+Or equivalently via `.env`:
+
+```bash
+ANTHROPIC_API_KEY=sk-or-v1-xxxx
+ANTHROPIC_BASE_URL=https://openrouter.ai/api
+CUECLAW_MODEL=anthropic/claude-sonnet-4-6
 ```
 
 The client factory (`createAnthropicClient`) automatically detects non-official base URLs and uses `authToken` instead of `apiKey` for authentication, which is required for compatibility with most proxy services.
@@ -147,6 +159,7 @@ In dev mode, the onboarding wizard and `set_secret` planner tool write secrets t
 |----------|--------|
 | `ANTHROPIC_API_KEY` | Overrides `claude.api_key` in config |
 | `ANTHROPIC_BASE_URL` | Overrides `claude.base_url` in config |
+| `CUECLAW_MODEL` | Overrides both `claude.planner.model` and `claude.executor.model` |
 | `TELEGRAM_BOT_TOKEN` | Sets `telegram.token` and auto-enables Telegram channel |
 
 ### Credential Auto-Detection

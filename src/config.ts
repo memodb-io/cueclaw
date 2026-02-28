@@ -143,6 +143,12 @@ export function loadConfig(): CueclawConfig {
     merged.claude = merged.claude ?? {}
     ;(merged.claude as Record<string, any>).base_url = process.env['ANTHROPIC_BASE_URL']
   }
+  if (process.env['CUECLAW_MODEL']) {
+    merged.claude = merged.claude ?? {}
+    const model = process.env['CUECLAW_MODEL']
+    ;(merged.claude as Record<string, any>).planner = { ...(merged.claude as Record<string, any>).planner, model }
+    ;(merged.claude as Record<string, any>).executor = { ...(merged.claude as Record<string, any>).executor, model }
+  }
   if (process.env['TELEGRAM_BOT_TOKEN']) {
     merged.telegram = merged.telegram ?? {}
     ;(merged.telegram as Record<string, any>).token = process.env['TELEGRAM_BOT_TOKEN']
