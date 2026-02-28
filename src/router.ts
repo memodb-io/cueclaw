@@ -353,7 +353,8 @@ export class MessageRouter {
       }
     } else if (['no', 'n', 'cancel', '3'].includes(lower)) {
       this.pendingConfirmations.delete(chatJid)
-      rejectPlan(pending.workflow)
+      const rejected = rejectPlan(pending.workflow)
+      updateWorkflowPhase(this.db, pending.workflowId, rejected.phase)
       logger.info({ workflowId: pending.workflowId, chatJid }, 'Workflow rejected via channel')
       await channel.sendMessage(chatJid, 'Plan cancelled.')
     } else if (['modify', 'm', '2'].includes(lower)) {

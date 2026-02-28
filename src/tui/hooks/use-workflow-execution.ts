@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { confirmPlan, rejectPlan } from '../../planner.js'
 import { executeWorkflow } from '../../executor.js'
-import { upsertWorkflow } from '../../db.js'
+import { upsertWorkflow, updateWorkflowPhase } from '../../db.js'
 import { logger } from '../../logger.js'
 import type { Workflow } from '../../types.js'
 import type { DaemonBridge } from '../daemon-bridge.js'
@@ -112,14 +112,15 @@ export function useWorkflowExecution(
 
   const handleCancel = useCallback(() => {
     if (workflow) {
-      rejectPlan(workflow)
+      const rejected = rejectPlan(workflow)
+      updateWorkflowPhase(db, workflow.id, rejected.phase)
     }
     if (plannerSessionRef.current) {
       (plannerSessionRef as React.MutableRefObject<PlannerSession | null>).current = null
     }
     dispatch({ type: 'SHOW_CHAT' })
     dispatch({ type: 'ADD_MESSAGE', message: { type: 'assistant', text: 'Plan cancelled.' } as ChatMessage })
-  }, [workflow])
+  }, [workflow, db])
 
   const handleExecutionBack = useCallback(() => {
     dispatch({ type: 'SHOW_CHAT' })

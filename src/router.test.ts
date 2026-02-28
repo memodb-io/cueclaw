@@ -278,6 +278,37 @@ describe('MessageRouter', () => {
     })
   })
 
+  describe('rejectPlan persistence', () => {
+    it('persists rejection to database when user cancels via confirmation flow', async () => {
+      const { insertWorkflow, getWorkflow } = await import('./db.js')
+      const workflow = {
+        id: 'wf_reject',
+        name: 'Reject Test',
+        description: 'test',
+        trigger: { type: 'manual' as const },
+        steps: [],
+        failure_policy: { on_step_failure: 'stop' as const, max_retries: 0, retry_delay_ms: 5000 },
+        phase: 'awaiting_confirmation' as const,
+        schema_version: '1.0' as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      insertWorkflow(db, workflow)
+
+      const routerAny = router as any
+      routerAny.pendingConfirmations.set('user1', {
+        workflowId: 'wf_reject',
+        workflow,
+        channelContext: { channel: 'test', chatJid: 'user1', sender: 'user1' },
+        expiresAt: Date.now() + 60_000,
+      })
+
+      await router.handleInbound('test', 'user1', { text: 'no', sender: 'user1' })
+      const updated = getWorkflow(db, 'wf_reject')
+      expect(updated!.phase).toBe('planning')
+    })
+  })
+
   describe('disconnectAll', () => {
     it('disconnects all registered channels', async () => {
       const channel2 = createMockChannel('test2')
