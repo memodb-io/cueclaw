@@ -9,9 +9,9 @@ claude:
   api_key: ${ANTHROPIC_API_KEY}
   base_url: https://api.anthropic.com  # Custom API endpoint (OpenRouter, etc.)
   planner:
-    model: claude-sonnet-4-6
+    model: claude-opus-4-6
   executor:
-    model: claude-sonnet-4-6
+    model: claude-opus-4-6
     # api_key: ${EXECUTOR_API_KEY}     # Optional: override global API key for executor
     # base_url: https://custom.api.com # Optional: override global base URL for executor
     # skip_permissions: false          # Optional: skip Claude Code permission checks
@@ -63,9 +63,9 @@ claude:
   api_key: sk-or-v1-xxxx          # Provider-specific API key
   base_url: https://openrouter.ai/api/v1
   planner:
-    model: anthropic/claude-sonnet-4-6   # OpenRouter model names use provider prefix
+    model: anthropic/claude-opus-4-6   # OpenRouter model names use provider prefix
   executor:
-    model: anthropic/claude-sonnet-4-6
+    model: anthropic/claude-opus-4-6
 ```
 
 Or equivalently via `.env`:
@@ -73,7 +73,7 @@ Or equivalently via `.env`:
 ```bash
 ANTHROPIC_API_KEY=sk-or-v1-xxxx
 ANTHROPIC_BASE_URL=https://openrouter.ai/api
-CUECLAW_MODEL=anthropic/claude-sonnet-4-6
+CUECLAW_MODEL=anthropic/claude-opus-4-6
 ```
 
 The client factory (`createAnthropicClient`) automatically detects non-official base URLs and uses `authToken` instead of `apiKey` for authentication, which is required for compatibility with most proxy services.
@@ -181,7 +181,7 @@ The executor-specific fields (`claude.executor.api_key`, `claude.executor.base_u
 
 | Module | Recommended Model | Rationale |
 |--------|------------------|-----------|
-| **Planner** | Claude Sonnet | Balances cost and quality; plan generation is frequent |
-| **Executor** (agent) | Claude Sonnet | Workhorse for code execution |
+| **Planner** | Claude Opus | Deep reasoning for high-quality plan generation |
+| **Executor** (agent) | Claude Opus | Workhorse for code execution |
 | **Complex architecture** | Claude Opus | Deep reasoning, manual switch via `--model opus` |
 | **Trigger script validation** | Claude Haiku | Lightweight validation, low cost |

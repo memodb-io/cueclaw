@@ -92,8 +92,8 @@ const ConfigSchema = z.object({
   claude: z.object({
     api_key: z.string(),
     base_url: z.string().url().default('https://api.anthropic.com'),
-    planner: z.object({ model: z.string().default('claude-sonnet-4-6') }),
-    executor: z.object({ model: z.string().default('claude-sonnet-4-6') }),
+    planner: z.object({ model: z.string().default('claude-opus-4-6') }),
+    executor: z.object({ model: z.string().default('claude-opus-4-6') }),
   }),
   identity: z.object({ name: z.string() }).optional(),
   whatsapp: z.object({

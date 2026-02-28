@@ -6,9 +6,9 @@ claude:
   api_key: ${ANTHROPIC_API_KEY}
   # base_url: https://api.anthropic.com
   planner:
-    model: claude-sonnet-4-6
+    model: claude-opus-4-6
   executor:
-    model: claude-sonnet-4-6
+    model: claude-opus-4-6
 
 # identity:
 #   name: your-name

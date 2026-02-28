@@ -10,7 +10,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: [
         {
           type: 'tool_use',
@@ -36,7 +36,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: [
         {
           type: 'tool_use',
@@ -71,7 +71,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: [
         {
           type: 'tool_use',
@@ -97,7 +97,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: [
         { type: 'text', text: 'Here is some explanation.' },
       ],
@@ -118,7 +118,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: null,
       stop_reason: 'end_turn',
       stop_sequence: null,
@@ -134,7 +134,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: [
         {
           type: 'tool_use',
@@ -169,7 +169,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: [
         {
           type: 'tool_use',
@@ -196,7 +196,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: [
         {
           type: 'tool_use',
@@ -225,7 +225,7 @@ describe('parsePlannerToolResponse', () => {
       id: 'msg_123',
       type: 'message',
       role: 'assistant',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       content: [
         {
           type: 'tool_use',

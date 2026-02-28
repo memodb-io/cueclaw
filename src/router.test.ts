@@ -30,8 +30,8 @@ function createMockConfig(): CueclawConfig {
     claude: {
       api_key: 'test-key',
       base_url: 'https://api.anthropic.com',
-      planner: { model: 'claude-sonnet-4-6' },
-      executor: { model: 'claude-sonnet-4-6' },
+      planner: { model: 'claude-opus-4-6' },
+      executor: { model: 'claude-opus-4-6' },
     },
   } as CueclawConfig
 }

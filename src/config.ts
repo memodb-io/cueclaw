@@ -16,13 +16,13 @@ const ConfigSchema = z.object({
   claude: z.object({
     api_key: z.string(),
     base_url: z.url().default('https://api.anthropic.com'),
-    planner: z.object({ model: z.string().default('claude-sonnet-4-6') }).default({ model: 'claude-sonnet-4-6' }),
+    planner: z.object({ model: z.string().default('claude-opus-4-6') }).default({ model: 'claude-opus-4-6' }),
     executor: z.object({
-      model: z.string().default('claude-sonnet-4-6'),
+      model: z.string().default('claude-opus-4-6'),
       api_key: z.string().optional(),
       base_url: z.url().optional(),
       skip_permissions: z.boolean().default(false),
-    }).default({ model: 'claude-sonnet-4-6', skip_permissions: false }),
+    }).default({ model: 'claude-opus-4-6', skip_permissions: false }),
   }),
   identity: z.object({ name: z.string() }).optional(),
   whatsapp: z.object({
@@ -175,9 +175,9 @@ const DEFAULT_CONFIG = `# CueClaw Configuration
 claude:
   api_key: \${ANTHROPIC_API_KEY}
   planner:
-    model: claude-sonnet-4-6
+    model: claude-opus-4-6
   executor:
-    model: claude-sonnet-4-6
+    model: claude-opus-4-6
 
 container:
   enabled: true
