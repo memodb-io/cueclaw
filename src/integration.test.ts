@@ -176,6 +176,97 @@ describe('Integration: Failure policy', () => {
     expect(result.results.get('independent')?.status).toBe('succeeded')
     expect(result.results.get('dependent')?.status).toBe('skipped')
   })
+
+  it('retries failed step when ask_user returns retry', async () => {
+    const { runAgent } = await import('./agent-runner.js')
+    const callCounts = new Map<string, number>()
+    vi.mocked(runAgent).mockImplementation((opts: any) => {
+      const stepId = opts.stepId as string
+      const count = (callCounts.get(stepId) ?? 0) + 1
+      callCounts.set(stepId, count)
+
+      if (stepId === 'flaky-step' && count === 1) {
+        return {
+          resultPromise: Promise.resolve({ status: 'failed', error: 'first attempt failed' } as StepRunResult),
+          abort: () => {},
+        }
+      }
+
+      return {
+        resultPromise: Promise.resolve({
+          status: 'succeeded',
+          output: `output-from-${stepId}-attempt-${count}`,
+        } as StepRunResult),
+        abort: () => {},
+      }
+    })
+
+    const workflow = createTestWorkflow({
+      steps: [
+        { id: 'flaky-step', description: 'Flaky step', agent: 'claude', inputs: {}, depends_on: [] },
+        { id: 'after-retry', description: 'Runs after retry', agent: 'claude', inputs: {}, depends_on: ['flaky-step'] },
+      ],
+      failure_policy: { on_step_failure: 'ask_user', max_retries: 0, retry_delay_ms: 0 },
+    })
+    insertWorkflow(db, workflow)
+    const confirmed = confirmPlan(workflow)
+    const onStepFailure = vi.fn().mockResolvedValue('retry')
+
+    const result = await executeWorkflow({
+      workflow: confirmed,
+      triggerData: null,
+      db,
+      cwd: '/tmp',
+      onStepFailure,
+    })
+
+    expect(result.status).toBe('completed')
+    expect(result.results.get('flaky-step')?.status).toBe('succeeded')
+    expect(result.results.get('after-retry')?.status).toBe('succeeded')
+    expect(onStepFailure).toHaveBeenCalledTimes(1)
+    expect(callCounts.get('flaky-step')).toBe(2)
+  })
+
+  it('calls ask_user for each failed step in same batch', async () => {
+    const { runAgent } = await import('./agent-runner.js')
+    vi.mocked(runAgent).mockImplementation((opts: any) => {
+      const stepId = opts.stepId as string
+      if (stepId.startsWith('fail-')) {
+        return {
+          resultPromise: Promise.resolve({ status: 'failed', error: `${stepId} failed` } as StepRunResult),
+          abort: () => {},
+        }
+      }
+      return {
+        resultPromise: Promise.resolve({ status: 'succeeded', output: `ok-${stepId}` } as StepRunResult),
+        abort: () => {},
+      }
+    })
+
+    const workflow = createTestWorkflow({
+      steps: [
+        { id: 'fail-a', description: 'fail a', agent: 'claude', inputs: {}, depends_on: [] },
+        { id: 'fail-b', description: 'fail b', agent: 'claude', inputs: {}, depends_on: [] },
+      ],
+      failure_policy: { on_step_failure: 'ask_user', max_retries: 0, retry_delay_ms: 0 },
+    })
+    insertWorkflow(db, workflow)
+    const confirmed = confirmPlan(workflow)
+    const onStepFailure = vi.fn().mockResolvedValue('skip')
+
+    const result = await executeWorkflow({
+      workflow: confirmed,
+      triggerData: null,
+      db,
+      cwd: '/tmp',
+      onStepFailure,
+    })
+
+    expect(result.status).toBe('completed')
+    expect(result.results.get('fail-a')?.status).toBe('failed')
+    expect(result.results.get('fail-b')?.status).toBe('failed')
+    expect(onStepFailure).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('Integration: Plan confirmation flow', () => {

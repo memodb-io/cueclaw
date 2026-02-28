@@ -89,6 +89,7 @@ export interface ExecuteOptions {
 async function executeStepOnce(
   step: PlanStep,
   resolvedInputs: Record<string, any>,
+  workflowId: string,
   runId: string,
   db: Database.Database,
   cwd: string,
@@ -117,7 +118,7 @@ async function executeStepOnce(
   const handle = runAgent({
     prompt,
     cwd,
-    workflowId: step.id,
+    workflowId,
     stepId: step.id,
     runId,
     onProgress: onProgress ? (msg) => onProgress(step.id, msg) : undefined,
@@ -148,6 +149,7 @@ async function executeStepOnce(
 async function executeStepWithRetry(
   step: PlanStep,
   resolvedInputs: Record<string, any>,
+  workflowId: string,
   runId: string,
   db: Database.Database,
   cwd: string,
@@ -159,7 +161,7 @@ async function executeStepWithRetry(
   let delay = policy.retry_delay_ms ?? 5000
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const result = await executeStepOnce(step, resolvedInputs, runId, db, cwd, onProgress, execLogger)
+    const result = await executeStepOnce(step, resolvedInputs, workflowId, runId, db, cwd, onProgress, execLogger)
     if (result.status !== 'failed' || attempt === maxRetries) return result
 
     logger.info({ stepId: step.id, attempt, delay }, 'Retrying step')
@@ -268,21 +270,40 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
           remaining.delete(step.id)
           const resolvedInputs = resolveInputs(step.inputs, completed, triggerData)
           const result = await executeStepWithRetry(
-            step, resolvedInputs, runId, db, cwd,
+            step, resolvedInputs, workflow.id, runId, db, cwd,
             workflow.failure_policy, onProgress, execLogger,
           )
           return { stepId: step.id, result }
         })
       )
 
+      // First pass: record all results
       for (const { stepId, result } of results) {
         completed.set(stepId, result)
+      }
 
-        if (result.status === 'failed') {
-          const policy = workflow.failure_policy.on_step_failure
+      // Second pass: handle failure policies for all failed steps
+      for (const { stepId, result } of results) {
+        if (result.status !== 'failed') continue
 
-          if (policy === 'stop') {
-            execLogger.warn({ stepId, policy: 'stop' }, 'Stop policy triggered, skipping remaining steps')
+        const policy = workflow.failure_policy.on_step_failure
+
+        if (policy === 'stop') {
+          execLogger.warn({ stepId, policy: 'stop' }, 'Stop policy triggered, skipping remaining steps')
+          for (const remainingId of remaining) {
+            completed.set(remainingId, { status: 'skipped' })
+            const skipRunId = `sr_${nanoid()}`
+            insertStepRun(db, { id: skipRunId, run_id: runId, step_id: remainingId, status: 'skipped' })
+          }
+          remaining.clear()
+          runFailed = true
+          break
+        }
+
+        if (policy === 'ask_user' && onStepFailure) {
+          const decision = await onStepFailure(stepMap.get(stepId)!, result.error ?? 'Unknown error')
+          execLogger.info({ stepId, decision }, 'ask_user decision received')
+          if (decision === 'stop') {
             for (const remainingId of remaining) {
               completed.set(remainingId, { status: 'skipped' })
               const skipRunId = `sr_${nanoid()}`
@@ -292,26 +313,17 @@ export async function executeWorkflow(opts: ExecuteOptions): Promise<ExecutionRe
             runFailed = true
             break
           }
-
-          if (policy === 'ask_user' && onStepFailure) {
-            const decision = await onStepFailure(stepMap.get(stepId)!, result.error ?? 'Unknown error')
-            execLogger.info({ stepId, decision }, 'ask_user decision received')
-            if (decision === 'stop') {
-              for (const remainingId of remaining) {
-                completed.set(remainingId, { status: 'skipped' })
-                const skipRunId = `sr_${nanoid()}`
-                insertStepRun(db, { id: skipRunId, run_id: runId, step_id: remainingId, status: 'skipped' })
-              }
-              remaining.clear()
-              runFailed = true
-              break
-            }
-            // 'skip' continues naturally via skip_dependents logic
-            // 'retry' would need re-adding to remaining, but for now skip_dependents handles it
+          if (decision === 'retry') {
+            remaining.add(stepId)
+            completed.delete(stepId)
+            execLogger.info({ stepId }, 'Re-queuing step for retry')
+            // Continue processing other failed steps in this batch
+            continue
           }
-
-          // 'skip_dependents': failed deps caught at top of loop
+          // 'skip' continues naturally via skip_dependents logic
         }
+
+        // 'skip_dependents': failed deps caught at top of loop
       }
     }
   } catch (err) {
