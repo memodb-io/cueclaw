@@ -11,6 +11,7 @@ const CONFIRMATION_TIMEOUT = 10 * 60_000
 const RATE_LIMIT_WINDOW = 60_000
 const RATE_LIMIT_MAX = 10
 const CLEANUP_INTERVAL = 5 * 60_000
+const ACTIVE_JID_TTL = 24 * 60 * 60_000
 
 interface PendingConfirmation {
   workflowId: string
@@ -23,6 +24,7 @@ export class MessageRouter {
   private channels: Map<string, Channel> = new Map()
   private pendingConfirmations: Map<string, PendingConfirmation> = new Map()
   private messageTimestamps: Map<string, number[]> = new Map()
+  private activeJids: Map<string, Map<string, number>> = new Map()
   private cleanupTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(
@@ -45,6 +47,7 @@ export class MessageRouter {
       clearInterval(this.cleanupTimer)
       this.cleanupTimer = null
     }
+    this.activeJids.clear()
   }
 
   /** Disconnect all registered channels */
@@ -54,15 +57,44 @@ export class MessageRouter {
     )
   }
 
-  /** Broadcast a notification to all connected channels (used by MCP handler) */
+  /** Broadcast a notification to all active users on connected channels */
   broadcastNotification(message: string): void {
-    for (const channel of this.channels.values()) {
-      if (channel.isConnected()) {
-        channel.sendMessage('broadcast', message).catch((err) => {
-          logger.error({ err, channel: channel.name }, 'Failed to broadcast notification')
+    const now = Date.now()
+    for (const [channelName, channel] of this.channels) {
+      if (!channel.isConnected()) continue
+      const jids = this.activeJids.get(channelName)
+      const recipients = new Set<string>()
+
+      if (jids && jids.size > 0) {
+        for (const [jid, lastSeenAt] of jids) {
+          if (now - lastSeenAt <= ACTIVE_JID_TTL) recipients.add(jid)
+        }
+      }
+
+      // On cold start (or after TTL cleanup), fall back to configured allowlists.
+      // This keeps daemon restart notifications deliverable even before new inbound traffic.
+      if (recipients.size === 0) {
+        for (const jid of this.getConfiguredRecipients(channelName)) {
+          recipients.add(jid)
+        }
+      }
+
+      for (const jid of recipients) {
+        channel.sendMessage(jid, message).catch((err) => {
+          logger.error({ err, channel: channelName, jid }, 'Failed to broadcast notification')
         })
       }
     }
+  }
+
+  private getConfiguredRecipients(channelName: string): string[] {
+    if (channelName === 'telegram') {
+      return this.config.telegram?.allowed_users ?? []
+    }
+    if (channelName === 'whatsapp') {
+      return this.config.whatsapp?.allowed_jids ?? []
+    }
+    return []
   }
 
   async handleInbound(channelName: string, chatJid: string, message: NewMessage): Promise<void> {
@@ -75,6 +107,10 @@ export class MessageRouter {
     const text = typeof message === 'string' ? message : message.text
     const sender = typeof message === 'string' ? undefined : message.sender
     logger.debug({ channelName, chatJid }, 'Inbound message received')
+
+    // Track active JIDs for broadcast
+    if (!this.activeJids.has(channelName)) this.activeJids.set(channelName, new Map())
+    this.activeJids.get(channelName)!.set(chatJid, Date.now())
 
     // Rate limiting
     if (this.isRateLimited(chatJid)) {
@@ -368,6 +404,16 @@ export class MessageRouter {
         this.messageTimestamps.delete(jid)
       } else {
         this.messageTimestamps.set(jid, recent)
+      }
+    }
+    for (const [channelName, jids] of this.activeJids) {
+      for (const [jid, lastSeenAt] of jids) {
+        if (now - lastSeenAt > ACTIVE_JID_TTL) {
+          jids.delete(jid)
+        }
+      }
+      if (jids.size === 0) {
+        this.activeJids.delete(channelName)
       }
     }
   }

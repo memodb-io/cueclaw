@@ -181,6 +181,103 @@ describe('MessageRouter', () => {
     })
   })
 
+  describe('broadcastNotification', () => {
+    it('sends to active JIDs instead of invalid broadcast JID', async () => {
+      // Trigger an inbound message to register active JID
+      await router.handleInbound('test', 'user1', { text: '/help', sender: 'user1' })
+      channel.sentMessages.length = 0
+
+      router.broadcastNotification('Workflow complete!')
+      // Wait for async sendMessage
+      await new Promise(r => setTimeout(r, 10))
+      expect(channel.sentMessages).toHaveLength(1)
+      expect(channel.sentMessages[0]!.jid).toBe('user1')
+      expect(channel.sentMessages[0]!.text).toBe('Workflow complete!')
+    })
+
+    it('sends to multiple active users', async () => {
+      await router.handleInbound('test', 'user1', { text: '/help', sender: 'user1' })
+      await router.handleInbound('test', 'user2', { text: '/help', sender: 'user2' })
+      channel.sentMessages.length = 0
+
+      router.broadcastNotification('Alert!')
+      await new Promise(r => setTimeout(r, 10))
+      const jids = channel.sentMessages.map(m => m.jid)
+      expect(jids).toContain('user1')
+      expect(jids).toContain('user2')
+    })
+
+    it('does not send when no active JIDs', () => {
+      router.broadcastNotification('Nobody here')
+      expect(channel.sentMessages).toHaveLength(0)
+    })
+
+    it('falls back to configured allowlist recipients on cold start', async () => {
+      const routerWithAllowlist = new MessageRouter(_initTestDatabase(), {
+        ...createMockConfig(),
+        telegram: {
+          enabled: true,
+          token: 'test-token',
+          allowed_users: ['1001', '1002'],
+        },
+      } as CueclawConfig, '/tmp')
+      const telegramChannel = createMockChannel('telegram')
+      routerWithAllowlist.registerChannel(telegramChannel)
+
+      routerWithAllowlist.broadcastNotification('Recover notice')
+      await new Promise(r => setTimeout(r, 10))
+
+      const jids = telegramChannel.sentMessages.map(m => m.jid)
+      expect(jids).toContain('1001')
+      expect(jids).toContain('1002')
+    })
+
+    it('prefers active JIDs over allowlist fallback when active users exist', async () => {
+      const routerWithAllowlist = new MessageRouter(_initTestDatabase(), {
+        ...createMockConfig(),
+        telegram: {
+          enabled: true,
+          token: 'test-token',
+          allowed_users: ['1001', '1002'],
+        },
+      } as CueclawConfig, '/tmp')
+      const telegramChannel = createMockChannel('telegram')
+      routerWithAllowlist.registerChannel(telegramChannel)
+
+      await routerWithAllowlist.handleInbound('telegram', 'active-user', { text: '/help', sender: 'active-user' })
+      telegramChannel.sentMessages.length = 0
+
+      routerWithAllowlist.broadcastNotification('Target active users')
+      await new Promise(r => setTimeout(r, 10))
+
+      const jids = telegramChannel.sentMessages.map(m => m.jid)
+      expect(jids).toEqual(['active-user'])
+    })
+
+    it('skips stale active JIDs', async () => {
+      await router.handleInbound('test', 'user1', { text: '/help', sender: 'user1' })
+      channel.sentMessages.length = 0
+
+      const routerAny = router as any
+      const activeForChannel = routerAny.activeJids.get('test') as Map<string, number>
+      activeForChannel.set('user1', Date.now() - 25 * 60 * 60_000)
+
+      router.broadcastNotification('Stale check')
+      await new Promise(r => setTimeout(r, 10))
+      expect(channel.sentMessages).toHaveLength(0)
+    })
+
+    it('cleanup removes stale active JIDs', async () => {
+      await router.handleInbound('test', 'user1', { text: '/help', sender: 'user1' })
+      const routerAny = router as any
+      const activeForChannel = routerAny.activeJids.get('test') as Map<string, number>
+      activeForChannel.set('user1', Date.now() - 25 * 60 * 60_000)
+
+      routerAny.cleanupRateLimits()
+      expect(routerAny.activeJids.get('test')).toBeUndefined()
+    })
+  })
+
   describe('disconnectAll', () => {
     it('disconnects all registered channels', async () => {
       const channel2 = createMockChannel('test2')
