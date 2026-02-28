@@ -213,9 +213,17 @@ export function getWorkflowRun(db: Database.Database, id: string): WorkflowRun |
 }
 
 export function updateWorkflowRunStatus(db: Database.Database, id: string, status: WorkflowRun['status'], error?: string): void {
-  const completedAt = status !== 'running' ? new Date().toISOString() : null
-  db.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, error = ? WHERE id = ?')
-    .run(status, completedAt, error ?? null, id)
+  const now = new Date()
+  const completedAt = status !== 'running' ? now.toISOString() : null
+  let durationMs: number | null = null
+  if (completedAt) {
+    const row = db.prepare('SELECT started_at FROM workflow_runs WHERE id = ?').get(id) as { started_at: string } | undefined
+    if (row?.started_at) {
+      durationMs = now.getTime() - new Date(row.started_at).getTime()
+    }
+  }
+  db.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, error = ?, duration_ms = ? WHERE id = ?')
+    .run(status, completedAt, error ?? null, durationMs, id)
 }
 
 // ─── CRUD: Step Runs ───
@@ -232,9 +240,17 @@ export function getStepRun(db: Database.Database, id: string): StepRun | undefin
 }
 
 export function updateStepRunStatus(db: Database.Database, id: string, status: StepRun['status'], output?: string, error?: string): void {
-  const completedAt = status === 'succeeded' || status === 'failed' || status === 'skipped' ? new Date().toISOString() : null
-  db.prepare('UPDATE step_runs SET status = ?, output_json = ?, error = ?, completed_at = ? WHERE id = ?')
-    .run(status, output ?? null, error ?? null, completedAt, id)
+  const now = new Date()
+  const completedAt = status === 'succeeded' || status === 'failed' || status === 'skipped' ? now.toISOString() : null
+  let durationMs: number | null = null
+  if (completedAt) {
+    const row = db.prepare('SELECT started_at FROM step_runs WHERE id = ?').get(id) as { started_at: string } | undefined
+    if (row?.started_at) {
+      durationMs = now.getTime() - new Date(row.started_at).getTime()
+    }
+  }
+  db.prepare('UPDATE step_runs SET status = ?, output_json = ?, error = ?, completed_at = ?, duration_ms = ? WHERE id = ?')
+    .run(status, output ?? null, error ?? null, completedAt, durationMs, id)
 }
 
 export function getStepRunsByRunId(db: Database.Database, runId: string): StepRun[] {

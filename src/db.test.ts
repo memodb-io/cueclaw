@@ -149,6 +149,23 @@ describe('Database', () => {
       expect(updated!.status).toBe('completed')
       expect(updated!.completed_at).toBeDefined()
     })
+
+    it('computes duration_ms on completion', () => {
+      insertWorkflow(db, makeWorkflow())
+      const startedAt = new Date(Date.now() - 5000).toISOString()
+      insertWorkflowRun(db, {
+        id: 'run_dur',
+        workflow_id: 'wf_test1',
+        trigger_data: null,
+        status: 'running',
+        started_at: startedAt,
+      })
+
+      updateWorkflowRunStatus(db, 'run_dur', 'completed')
+      const updated = getWorkflowRun(db, 'run_dur')
+      expect(updated!.duration_ms).toBeGreaterThanOrEqual(4000)
+      expect(updated!.duration_ms).toBeLessThan(10000)
+    })
   })
 
   describe('step runs', () => {
@@ -191,6 +208,22 @@ describe('Database', () => {
       expect(updated!.status).toBe('succeeded')
       expect(updated!.output_json).toBe('{"result": "done"}')
       expect(updated!.completed_at).toBeDefined()
+    })
+
+    it('computes duration_ms on step completion', () => {
+      const startedAt = new Date(Date.now() - 3000).toISOString()
+      insertStepRun(db, {
+        id: 'sr_dur',
+        run_id: 'run_1',
+        step_id: 'step-1',
+        status: 'running',
+        started_at: startedAt,
+      })
+
+      updateStepRunStatus(db, 'sr_dur', 'succeeded', 'output')
+      const updated = getStepRun(db, 'sr_dur')
+      expect(updated!.duration_ms).toBeGreaterThanOrEqual(2000)
+      expect(updated!.duration_ms).toBeLessThan(8000)
     })
 
     it('lists step runs by run ID', () => {
