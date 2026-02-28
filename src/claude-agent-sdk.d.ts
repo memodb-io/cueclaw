@@ -9,6 +9,8 @@ declare module '@anthropic-ai/claude-agent-sdk' {
     mcpServers?: Record<string, any>
     maxTurns?: number
     hooks?: Record<string, any>
+    env?: Record<string, string | undefined>
+    abortController?: AbortController
   }
 
   interface QueryInput {

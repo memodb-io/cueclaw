@@ -68,14 +68,16 @@ export function runAgent(opts: {
   let aborted = false
 
   const resultPromise = (async (): Promise<StepRunResult> => {
-    // Set executor-specific env vars for the Claude Code subprocess
+    // Build a snapshot of env vars for this step — avoids mutating process.env
+    // in concurrent parallel steps (each gets its own isolated env).
     const authToken = config.claude.executor.api_key ?? config.claude.api_key
     const baseUrl = config.claude.executor.base_url ?? config.claude.base_url
-    const prevAuthToken = process.env['ANTHROPIC_AUTH_TOKEN']
-    const prevBaseUrl = process.env['ANTHROPIC_BASE_URL']
-    process.env['ANTHROPIC_AUTH_TOKEN'] = authToken
+    const stepEnv: Record<string, string | undefined> = { ...process.env }
+    if (authToken) stepEnv['ANTHROPIC_AUTH_TOKEN'] = authToken
     if (baseUrl !== 'https://api.anthropic.com') {
-      process.env['ANTHROPIC_BASE_URL'] = baseUrl
+      stepEnv['ANTHROPIC_BASE_URL'] = baseUrl
+    } else {
+      delete stepEnv['ANTHROPIC_BASE_URL']
     }
 
     try {
@@ -97,6 +99,7 @@ export function runAgent(opts: {
           ],
           settingSources: ['project'],
           permissionMode: permMode,
+          env: stepEnv,
         },
       })
 
@@ -145,11 +148,7 @@ export function runAgent(opts: {
       logger.error({ err, stepId: opts.stepId }, 'Agent execution failed')
       return { status: 'failed', error: errorMsg }
     } finally {
-      // Restore previous env vars
-      if (prevAuthToken !== undefined) process.env['ANTHROPIC_AUTH_TOKEN'] = prevAuthToken
-      else delete process.env['ANTHROPIC_AUTH_TOKEN']
-      if (prevBaseUrl !== undefined) process.env['ANTHROPIC_BASE_URL'] = prevBaseUrl
-      else delete process.env['ANTHROPIC_BASE_URL']
+      // No env cleanup needed — env vars are passed via options.env, not process.env
     }
   })()
 

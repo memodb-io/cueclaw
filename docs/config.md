@@ -175,7 +175,7 @@ When running agent steps in local mode, CueClaw sets the following env vars for 
 | `ANTHROPIC_AUTH_TOKEN` | `claude.executor.api_key` → `claude.api_key` | API key for the executor subprocess |
 | `ANTHROPIC_BASE_URL` | `claude.executor.base_url` → `claude.base_url` | API base URL (only set if non-default) |
 
-The executor-specific fields (`claude.executor.api_key`, `claude.executor.base_url`) override the global values when set. Env vars are restored to their previous values after each step execution.
+The executor-specific fields (`claude.executor.api_key`, `claude.executor.base_url`) override the global values when set. Env vars are set once per `runAgent()` call (idempotent for concurrent parallel steps using the same config).
 
 ## Multi-Model Strategy
 
