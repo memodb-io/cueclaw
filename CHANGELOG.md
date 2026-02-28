@@ -1,5 +1,11 @@
 # cueclaw
 
+## 0.2.0
+
+### Minor Changes
+
+- 5bd904f: Change default model from claude-sonnet-4-6 to claude-opus-4-6
+
 ## 0.1.4
 
 ### Patch Changes
