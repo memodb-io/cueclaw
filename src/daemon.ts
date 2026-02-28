@@ -6,6 +6,7 @@ import { initDb } from './db.js'
 import { loadConfig, cueclawHome } from './config.js'
 import { MessageRouter } from './router.js'
 import { TriggerLoop } from './trigger-loop.js'
+import { cleanupStaleSessions } from './session.js'
 import { logger } from './logger.js'
 
 /** Path to the daemon PID file */
@@ -125,6 +126,10 @@ export async function startDaemon(): Promise<void> {
       logger.error({ err }, 'Failed to start Telegram channel')
     }
   }
+
+  // Cleanup stale sessions on startup
+  const cleaned = cleanupStaleSessions(db)
+  if (cleaned > 0) logger.info({ cleaned }, 'Cleaned up stale sessions')
 
   // Crash recovery
   await recoverRunningWorkflows(db, router)
