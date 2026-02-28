@@ -28,6 +28,7 @@ process.env.ANTHROPIC_API_KEY = input.apiKey
 
 let sessionId: string | undefined
 let result: string | null = null
+const abortController = new AbortController()
 
 // IPC input poller — runs in parallel with query()
 const ipcPoller = setInterval(() => {
@@ -37,16 +38,30 @@ const ipcPoller = setInterval(() => {
   // Check for close sentinel
   if (existsSync('/workspace/ipc/_close')) {
     clearInterval(ipcPoller)
-    process.exit(0)
+    abortController.abort()
+    return
   }
 
   const files = readdirSync(inputDir).filter(f => f.endsWith('.json')).sort()
   for (const file of files) {
+    const filePath = join(inputDir, file)
     try {
-      const _content = readFileSync(join(inputDir, file), 'utf-8')
-      // Handle host messages (context responses, user instructions)
-      unlinkSync(join(inputDir, file))
-    } catch { /* skip malformed files */ }
+      const content = readFileSync(filePath, 'utf-8')
+      const msg = JSON.parse(content)
+      if (msg.type === 'close') {
+        clearInterval(ipcPoller)
+        abortController.abort()
+        return
+      }
+      // Log host messages for debugging; full injection into agent session
+      // requires SDK streaming support (not yet available)
+      process.stderr.write(`[ipc] received: ${msg.type ?? 'unknown'}\n`)
+      unlinkSync(filePath)
+    } catch {
+      // Drop malformed files to avoid retry loops.
+      try { unlinkSync(filePath) } catch { /* ignore cleanup errors */ }
+      process.stderr.write(`[ipc] dropped malformed message: ${file}\n`)
+    }
   }
 }, 500)
 
@@ -61,6 +76,7 @@ try {
       ],
       settingSources: ['project'],
       permissionMode: 'default',
+      abortController,
     },
   })) {
     if (message.type === 'system' && message.subtype === 'init') {
