@@ -173,9 +173,17 @@ export function AppProvider({ cwd, skipOnboarding, children }: AppProviderProps)
     dispatch({ type: 'SHOW_DETAIL', workflow, runs, stepRuns })
   }, [db])
 
-  const handleStatusStop = useCallback((_workflow: import('../types.js').Workflow) => {
-    // TODO: implement workflow stop via daemon bridge
-  }, [])
+  const handleStatusStop = useCallback((workflow: import('../types.js').Workflow) => {
+    const controller = execution.abortMapRef.current.get(workflow.id)
+    if (controller) {
+      controller.abort()
+      dispatch({ type: 'ADD_MESSAGE', message: { type: 'system', text: `Stopping workflow: ${workflow.name}` } as ChatMessage })
+    } else {
+      dispatch({ type: 'ADD_MESSAGE', message: { type: 'warning', text: `Workflow "${workflow.name}" is not currently executing.` } as ChatMessage })
+    }
+    const workflows = listWorkflows(db)
+    dispatch({ type: 'SHOW_STATUS', workflows })
+  }, [db, execution.abortMapRef])
 
   const handleStatusDelete = useCallback((workflow: import('../types.js').Workflow) => {
     deleteWorkflow(db, workflow.id)
