@@ -20,6 +20,32 @@
 3. **Confirm**, and CueClaw runs it in the background as a daemon
 
 ```
+You: "Every day at 10am, scrape GitHub Trending for the top 10 projects,
+      summarize each with stars/language/description, and send the digest
+      to me on Telegram."
+
+CueClaw:
+  ┌─ Plan: GitHub Trending Digest ─────────────┐
+  │ Trigger: cron (0 10 * * *)                 │
+  │                                            │
+  │ 1. Fetch GitHub Trending page              │
+  │ 2. Extract top 10 projects with metadata   │
+  │    └─ depends on: step 1                   │
+  │ 3. Generate formatted digest summary       │
+  │    └─ depends on: step 2                   │
+  │ 4. Send digest via Telegram                │
+  │    └─ depends on: step 3                   │
+  │                                            │
+  │ [Y] Confirm  [M] Modify  [N] Cancel        │
+  └────────────────────────────────────────────┘
+```
+
+### More Examples
+
+<details>
+<summary><b>X (Twitter) Auto Engage</b> — poll trigger, daily cron summary</summary>
+
+```
 You: "Every 30 minutes, check my X timeline for trending AI/LLM tweets,
       reply with a professional but friendly tone, and post a daily
       original tweet summarizing the day's trends."
@@ -35,12 +61,10 @@ CueClaw:
   │    └─ depends on: step 2                   │
   │ 4. Daily: compose & post trend summary     │
   │    └─ cron: 0 21 * * *                     │
-  │                                            │
-  │ [Y] Confirm  [M] Modify  [N] Cancel        │
   └────────────────────────────────────────────┘
 ```
 
-### More Examples
+</details>
 
 <details>
 <summary><b>GitHub Issue to Draft PR</b> — poll trigger, multi-step DAG</summary>
@@ -60,30 +84,6 @@ CueClaw:
   │ 3. Commit plan & create Draft PR           │
   │    └─ depends on: step 2                   │
   │ 4. Notify via Telegram                     │
-  │    └─ depends on: step 3                   │
-  └────────────────────────────────────────────┘
-```
-
-</details>
-
-<details>
-<summary><b>GitHub Trending Daily Digest</b> — cron trigger, Telegram notification</summary>
-
-```
-You: "Every day at 10am, scrape GitHub Trending for the top 10 projects,
-      summarize each with stars/language/description, and send the digest
-      to me on Telegram."
-
-CueClaw:
-  ┌─ Plan: GitHub Trending Digest ─────────────┐
-  │ Trigger: cron (0 10 * * *)                 │
-  │                                            │
-  │ 1. Fetch GitHub Trending page              │
-  │ 2. Extract top 10 projects with metadata   │
-  │    └─ depends on: step 1                   │
-  │ 3. Generate formatted digest summary       │
-  │    └─ depends on: step 2                   │
-  │ 4. Send digest via Telegram                │
   │    └─ depends on: step 3                   │
   └────────────────────────────────────────────┘
 ```
