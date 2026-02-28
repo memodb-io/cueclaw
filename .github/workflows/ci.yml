@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -64,3 +69,68 @@ jobs:
       - name: Changeset status
         run: pnpm changeset status
         continue-on-error: true
+
+  release:
+    needs: [test, lint, typecheck]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+
+      - name: Create Release PR or Publish
+        uses: changesets/action@v1
+        id: changesets
+        with:
+          publish: pnpm changeset publish
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        if: steps.changesets.outputs.published == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.changesets.outputs.published == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: steps.changesets.outputs.published == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build agent-runner
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          cd container/agent-runner
+          pnpm install
+          pnpm build
+
+      - name: Build and push container image
+        if: steps.changesets.outputs.published == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: container
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/memodb-io/cueclaw-agent:latest
+            ghcr.io/memodb-io/cueclaw-agent:${{ fromJSON(steps.changesets.outputs.publishedPackages)[0].version }}

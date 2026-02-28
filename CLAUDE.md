@@ -81,28 +81,26 @@ Never write code that contradicts existing documentation. If the design needs to
 
 ## CI / CD
 
-Two workflows: `ci.yml` (CI) and `release.yml` (Release).
+Single workflow: `ci.yml` — runs on every push to `main`, all PRs, and `workflow_dispatch`.
 
-**CI** (`ci.yml`) — runs on every push to `main` and all PRs:
+**Jobs** (all in `ci.yml`):
 - **test**: build + `vitest run`
 - **lint**: `eslint`
 - **typecheck**: `tsc --noEmit`
 - **changeset**: PR-only, warns if changeset is missing (non-blocking)
-
-**Release** (`release.yml`) — triggered via `workflow_run` after CI passes on `main`:
-- Uses [changesets](https://github.com/changesets/changesets) for versioning and npm publishing
-- On publish, builds and pushes `ghcr.io/memodb-io/cueclaw-agent:{version}` + `:latest` container image to GHCR
-- npm Trusted Publishing is bound to `release.yml` filename — do not rename or merge into `ci.yml`
+- **release**: `needs: [test, lint, typecheck]`, runs on push to `main` or `workflow_dispatch` only — uses [changesets](https://github.com/changesets/changesets) for versioning, npm publishing, and GHCR container image push
 
 **Flow**:
 1. PR with `.changeset/*.md` file merged to `main`
-2. CI passes → Release workflow triggers → `changesets/action` detects pending changesets → creates "Version Packages" PR (bumps `package.json`, updates `CHANGELOG.md`, deletes changeset files)
-3. Merge the Version PR → CI passes → Release triggers again → `changeset publish` publishes to npm + creates git tag + GitHub Release automatically
+2. CI + release job runs → `changesets/action` detects pending changesets → creates "Version Packages" PR (bumps `package.json`, updates `CHANGELOG.md`, deletes changeset files)
+3. Merge the Version PR → use `workflow_dispatch` to trigger CI → `changeset publish` publishes to npm + creates git tag + GitHub Release automatically
 4. If published, builds `container/agent-runner`, then docker builds and pushes the agent image to GHCR with version and latest tags
 5. If no pending changesets exist, the release job is a no-op
+
+**Why `workflow_dispatch`**: Version Packages PRs are authored by `github-actions[bot]` via `GITHUB_TOKEN`. GitHub does not fire workflow events for bot-authored commits, so merging the Version PR won't auto-trigger CI. Use the "Run workflow" button in GitHub Actions UI (or `gh workflow run CI`) after merging.
 
 **When to add a changeset**: PRs that affect published code (features, fixes, API changes)
 **When NOT needed**: docs, CI config, tests-only, internal refactors
 **Developer workflow**: run `pnpm changeset` before submitting PR, select patch/minor/major, write summary
 
-**Auth**: npm OIDC Trusted Publishing (no NPM_TOKEN), GHCR via `GITHUB_TOKEN` (packages: write permission)
+**Auth**: npm OIDC Trusted Publishing (bound to `ci.yml`), GHCR via `GITHUB_TOKEN` (packages: write permission)
