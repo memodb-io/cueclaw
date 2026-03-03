@@ -1,4 +1,4 @@
-import React, { useReducer, useCallback, useMemo, useState, useEffect } from 'react'
+import React, { useReducer, useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { useApp } from 'ink'
 import { useDialog } from './dialog-manager.js'
 import type { Workflow, WorkflowRun, StepRun, StepStatus } from '../types.js'
@@ -6,7 +6,7 @@ import { initDb, listWorkflows, deleteWorkflow, getWorkflowRunsByWorkflowId, get
 import { loadConfig, validateConfig } from '../config.js'
 import { onLogLine } from '../logger.js'
 import type { CueclawConfig } from '../config.js'
-import { UIStateContext, type UIState, type ChatMessage, type View } from './ui-state-context.js'
+import { UIStateContext, type UIState, type ChatMessage, type StoredMessage, type View } from './ui-state-context.js'
 import { UIActionsContext, type UIActions } from './ui-actions-context.js'
 import type { StepProgress } from './execution-view.js'
 import { useDaemonBridge } from './hooks/use-daemon-bridge.js'
@@ -21,7 +21,7 @@ import { markSessionStart } from './hooks/exit-helpers.js'
 interface AppState {
   view: View
   previousView: View | null
-  messages: ChatMessage[]
+  messages: StoredMessage[]
   workflow: Workflow | null
   isGenerating: boolean
   stepProgress: Map<string, StepProgress>
@@ -32,7 +32,7 @@ interface AppState {
   detailStepRuns: StepRun[]
 }
 
-type AppAction =
+export type AppAction =
   | { type: 'SHOW_CHAT' }
   | { type: 'SHOW_ONBOARDING' }
   | { type: 'SHOW_PLAN'; workflow: Workflow }
@@ -40,13 +40,18 @@ type AppAction =
   | { type: 'SHOW_STATUS'; workflows: Workflow[] }
   | { type: 'SHOW_DETAIL'; workflow: Workflow; runs: WorkflowRun[]; stepRuns: StepRun[] }
   | { type: 'ADD_MESSAGE'; message: ChatMessage }
-  | { type: 'SET_MESSAGES'; messages: ChatMessage[] }
+  | { type: 'SET_MESSAGES'; messages: StoredMessage[] }
   | { type: 'SET_GENERATING'; value: boolean }
   | { type: 'SET_STREAMING_TEXT'; text: string }
   | { type: 'UPDATE_STEP'; stepId: string; progress: StepProgress }
   | { type: 'ADD_OUTPUT'; line: string }
 
-export function appReducer(state: AppState, action: AppAction): AppState {
+/** Internal action type used by the reducer — ADD_MESSAGE carries StoredMessage (with id). */
+export type ReducerAction =
+  | Exclude<AppAction, { type: 'ADD_MESSAGE' }>
+  | { type: 'ADD_MESSAGE'; message: StoredMessage }
+
+export function appReducer(state: AppState, action: ReducerAction): AppState {
   switch (action.type) {
     case 'SHOW_CHAT':
       return { ...state, view: 'chat', isGenerating: false, streamingText: '' }
@@ -70,8 +75,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, streamingText: action.text }
     case 'UPDATE_STEP':
       return { ...state, stepProgress: new Map(state.stepProgress).set(action.stepId, action.progress) }
-    case 'ADD_OUTPUT':
-      return { ...state, executionOutput: [...state.executionOutput, action.line] }
+    case 'ADD_OUTPUT': {
+      const next = [...state.executionOutput, action.line]
+      return { ...state, executionOutput: next.length > 200 ? next.slice(-200) : next }
+    }
     default:
       return state
   }
@@ -113,7 +120,16 @@ export function AppProvider({ cwd, skipOnboarding, children }: AppProviderProps)
     detailStepRuns: [],
   }
 
-  const [state, dispatch] = useReducer(appReducer, initialState)
+  const msgIdRef = useRef(0)
+  const [state, rawDispatch] = useReducer(appReducer, initialState)
+  const dispatch = useCallback((action: AppAction): void => {
+    if (action.type === 'ADD_MESSAGE') {
+      msgIdRef.current += 1
+      rawDispatch({ type: 'ADD_MESSAGE', message: { ...action.message, id: msgIdRef.current } })
+    } else {
+      rawDispatch(action)
+    }
+  }, [])
 
   // Record session start time for farewell message
   useEffect(() => { markSessionStart() }, [])

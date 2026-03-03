@@ -8,8 +8,9 @@ import type { DaemonBridge } from '../daemon-bridge.js'
 import type { ChatMessage } from '../ui-state-context.js'
 import type Database from 'better-sqlite3'
 import type { PlannerSession } from '../../planner-session.js'
+import type { AppAction } from '../app-provider.js'
 
-type Dispatch = (action: any) => void
+type Dispatch = (action: AppAction) => void
 
 export function useWorkflowExecution(
   workflow: Workflow | null,
@@ -31,6 +32,8 @@ export function useWorkflowExecution(
       upsertWorkflow(db, confirmed)
     } catch (err) {
       logger.error({ err }, 'Failed to persist workflow')
+      dispatch({ type: 'ADD_MESSAGE', message: { type: 'error', text: `Failed to save workflow: ${err instanceof Error ? err.message : String(err)}` } as ChatMessage })
+      return
     }
 
     const controller = new AbortController()

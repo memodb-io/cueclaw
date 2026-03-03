@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useRef } from 'react'
 import { parseSlashCommand, findCommand } from '../commands/index.js'
 import { cancelPlannerSession, type PlannerSession } from '../../planner-session.js'
 import { listWorkflows, getWorkflow, getWorkflowRunsByWorkflowId, getStepRunsByRunId } from '../../db.js'
@@ -9,8 +9,10 @@ import type { CueclawConfig } from '../../config.js'
 import type { CommandContext } from '../commands/types.js'
 import type { ChatMessage } from '../ui-state-context.js'
 import type Database from 'better-sqlite3'
+import type { AppAction } from '../app-provider.js'
+import type { Dialog } from '../dialog-manager.js'
 
-type Dispatch = (action: any) => void
+type Dispatch = (action: AppAction) => void
 
 interface UseCommandDispatchOptions {
   config: CueclawConfig | null
@@ -22,7 +24,7 @@ interface UseCommandDispatchOptions {
   setConfig: (config: CueclawConfig | null) => void
   setThemeVersion: React.Dispatch<React.SetStateAction<number>>
   exit: () => void
-  showDialog: (dialog: any) => void
+  showDialog: (dialog: Dialog) => void
   dismissDialog: () => void
 }
 
@@ -39,7 +41,8 @@ export function useCommandDispatch({
   showDialog,
   dismissDialog,
 }: UseCommandDispatchOptions) {
-  const commandCtx = useMemo<CommandContext>(() => ({
+  const commandCtxRef = useRef<CommandContext>(null!)
+  commandCtxRef.current = {
     db,
     config,
     cwd,
@@ -48,7 +51,7 @@ export function useCommandDispatch({
     clearMessages: () => dispatch({ type: 'SET_MESSAGES', messages: [] }),
     setConfig: setConfig as (config: CueclawConfig) => void,
     setThemeVersion,
-  }), [db, config, cwd])
+  }
 
   const handleSlashCommand = useCallback(async (text: string): Promise<boolean> => {
     if (!config) return false
@@ -56,9 +59,7 @@ export function useCommandDispatch({
     const parsed = parseSlashCommand(text)
     if (!parsed) return false
 
-    // Always refresh mutable refs before any command handling
-    commandCtx.bridge = bridgeRef.current
-    commandCtx.config = config
+    const commandCtx = commandCtxRef.current
 
     dispatch({ type: 'ADD_MESSAGE', message: { type: 'user', text } as ChatMessage })
 
@@ -166,7 +167,7 @@ export function useCommandDispatch({
       dispatch({ type: 'ADD_MESSAGE', message: { type: 'assistant', text: `Unknown command: /${parsed.name}. Type /help for available commands.` } as ChatMessage })
     }
     return true
-  }, [config, db, commandCtx])
+  }, [config, db, exit, showDialog, dismissDialog])
 
-  return { handleSlashCommand, commandCtx }
+  return { handleSlashCommand }
 }

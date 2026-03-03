@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeypress, KeyPriority } from './use-keypress.js'
 import { keyBindings } from './key-bindings.js'
@@ -12,6 +12,15 @@ import type { CueclawConfig } from '../config.js'
 function maskKey(key: string): string {
   if (key.length <= 8) return '****'
   return key.slice(0, 4) + '****' + key.slice(-4)
+}
+
+function StepLayout({ children, input }: { children: ReactNode; input: ReactNode }) {
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <Box flexDirection="column" flexGrow={1}>{children}</Box>
+      <Box marginTop={1}>{input}</Box>
+    </Box>
+  )
 }
 
 type OnboardingStep =
@@ -81,7 +90,7 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
     whatsappEnabled: existing.whatsappEnabled ?? false,
   })
 
-  const env = checkEnvironment()
+  const env = useMemo(() => checkEnvironment(), [])
 
   // ─── Esc to cancel (only when re-entering via /setup) ───
 
@@ -107,6 +116,11 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
     setStep(existing.baseUrl ? 'base_url_existing' : 'base_url')
   }, [existing])
 
+  /** Go to the telegram step. */
+  const gotoTelegram = useCallback(() => {
+    setStep(existing.telegramEnabled !== undefined ? 'telegram_existing' : 'telegram')
+  }, [existing])
+
   /** Go to the container step, or skip it if Docker is not available. */
   const gotoContainer = useCallback(() => {
     if (!(env.docker && env.dockerRunning)) {
@@ -114,12 +128,7 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
       return
     }
     setStep(existing.containerEnabled !== undefined ? 'container_existing' : 'container')
-  }, [env, existing])
-
-  /** Go to the telegram step. */
-  const gotoTelegram = useCallback(() => {
-    setStep(existing.telegramEnabled !== undefined ? 'telegram_existing' : 'telegram')
-  }, [existing])
+  }, [env, existing, gotoTelegram])
 
   /** Go to the telegram token step. */
   const gotoTelegramToken = useCallback(() => {
@@ -141,27 +150,6 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
       gotoTelegram()
     }
   }, [env, gotoContainer, gotoTelegram])
-
-  const handleApiKeySubmit = useCallback((value: string) => {
-    const key = value.trim()
-    if (!key) return
-    setState(s => ({ ...s, apiKey: key }))
-    if (isDev) {
-      gotoBaseUrl()
-    } else {
-      setStep('validating')
-      doValidation(key, '')
-    }
-  }, [gotoBaseUrl])
-
-  // ─── Step: Base URL ───
-
-  const handleBaseUrlSubmit = useCallback((value: string) => {
-    const url = value.trim()
-    setState(s => ({ ...s, baseUrl: url }))
-    setStep('validating')
-    doValidation(state.apiKey, url)
-  }, [state.apiKey])
 
   // ─── Validation ───
 
@@ -196,6 +184,27 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
     }
   }, [afterValidation])
 
+  const handleApiKeySubmit = useCallback((value: string) => {
+    const key = value.trim()
+    if (!key) return
+    setState(s => ({ ...s, apiKey: key }))
+    if (isDev) {
+      gotoBaseUrl()
+    } else {
+      setStep('validating')
+      doValidation(key, '')
+    }
+  }, [gotoBaseUrl, doValidation])
+
+  // ─── Step: Base URL ───
+
+  const handleBaseUrlSubmit = useCallback((value: string) => {
+    const url = value.trim()
+    setState(s => ({ ...s, baseUrl: url }))
+    setStep('validating')
+    doValidation(state.apiKey, url)
+  }, [state.apiKey, doValidation])
+
   // ─── Step: Container ───
 
   const handleContainerYes = useCallback(() => {
@@ -225,29 +234,15 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
     gotoWhatsApp()
   }, [gotoWhatsApp])
 
-  // ─── Step: WhatsApp ───
-
-  const finishWithWhatsApp = useCallback((enabled: boolean) => {
-    const next = { ...state, whatsappEnabled: enabled }
-    setState(s => ({ ...s, whatsappEnabled: enabled }))
-    setStep('saving')
-    doSaveConfig(next)
-  }, [state])
-
-  const handleWhatsAppYes = useCallback(() => finishWithWhatsApp(true), [finishWithWhatsApp])
-  const handleWhatsAppNo = useCallback(() => finishWithWhatsApp(false), [finishWithWhatsApp])
-
   // ─── Save Config ───
 
   const doSaveConfig = useCallback((finalState: OnboardingState) => {
     if (isDev) {
-      // Dev mode: only write to .env, never touch config.yaml
       writeEnvVar('ANTHROPIC_API_KEY', finalState.apiKey)
       if (finalState.baseUrl) {
         writeEnvVar('ANTHROPIC_BASE_URL', finalState.baseUrl)
       }
     } else {
-      // Production mode: write to config.yaml
       const configUpdates: Record<string, any> = {
         claude: {
           api_key: finalState.apiKey,
@@ -278,15 +273,19 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
     completeTimerRef.current = setTimeout(() => onComplete(config), 1500)
   }, [onComplete])
 
-  // ─── Render ───
+  // ─── Step: WhatsApp ───
 
-  /** Helper: wraps a step with content on top (flexGrow) and input pinned at bottom */
-  const StepLayout = ({ children, input }: { children: React.ReactNode; input: React.ReactNode }) => (
-    <Box flexDirection="column" flexGrow={1}>
-      <Box flexDirection="column" flexGrow={1}>{children}</Box>
-      <Box marginTop={1}>{input}</Box>
-    </Box>
-  )
+  const finishWithWhatsApp = useCallback((enabled: boolean) => {
+    const next = { ...state, whatsappEnabled: enabled }
+    setState(s => ({ ...s, whatsappEnabled: enabled }))
+    setStep('saving')
+    doSaveConfig(next)
+  }, [state, doSaveConfig])
+
+  const handleWhatsAppYes = useCallback(() => finishWithWhatsApp(true), [finishWithWhatsApp])
+  const handleWhatsAppNo = useCallback(() => finishWithWhatsApp(false), [finishWithWhatsApp])
+
+  // ─── Render ───
 
   return (
     <Box flexDirection="column" paddingX={1} flexGrow={1}>

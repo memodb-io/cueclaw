@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { theme as colors } from './theme/index.js'
 import { useUIState } from './ui-state-context.js'
@@ -37,7 +37,6 @@ export function Composer() {
 
   const allCommands = useMemo(() => getCommands(), [])
 
-  // Compute matching commands for the dropdown hint
   const matchingCommands = useMemo(() => {
     if (!currentInput.startsWith('/')) return []
     const prefix = currentInput.toLowerCase()
@@ -48,6 +47,20 @@ export function Composer() {
   }, [currentInput, allCommands])
 
   const showCommandHints = currentInput.startsWith('/') && matchingCommands.length > 0 && currentInput !== '/' + matchingCommands[0]?.name
+
+  const handleInputChange = useCallback((value: string) => {
+    setCurrentInput(value)
+    history.resetBrowsing()
+  }, [history])
+
+  const handleInputSubmit = useCallback((value: string) => {
+    const trimmed = value.trim()
+    if (trimmed) {
+      history.push(trimmed)
+      setCurrentInput('')
+      handleChatSubmit(trimmed)
+    }
+  }, [history, handleChatSubmit])
 
   const mode = modeLabel({ isExecuting, isGenerating, isConversing })
   const daemon = daemonLabel(daemonStatus)
@@ -97,18 +110,8 @@ export function Composer() {
             <Text color={colors.prompt}>{'> '}</Text>
             <ResettableInput
               placeholder="Describe a workflow or type /help"
-              onChange={(value) => {
-                setCurrentInput(value)
-                history.resetBrowsing()
-              }}
-              onSubmit={(value) => {
-                const trimmed = value.trim()
-                if (trimmed) {
-                  history.push(trimmed)
-                  setCurrentInput('')
-                  handleChatSubmit(trimmed)
-                }
-              }}
+              onChange={handleInputChange}
+              onSubmit={handleInputSubmit}
               onUpArrow={history.up}
               onDownArrow={history.down}
               isDisabled={isGenerating}

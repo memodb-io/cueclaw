@@ -27,10 +27,8 @@ export const ThinkingIndicator = memo(function ThinkingIndicator({ onCancel }: {
     return false
   }, [onCancel]))
 
-  // Cycle through gradient colors over ~4s
   const gradient = colors.ui.gradient
-  const cyclePos = (Date.now() / 4000) % 1
-  const gradientIdx = Math.floor(cyclePos * gradient.length) % gradient.length
+  const gradientIdx = frame % gradient.length
   const spinnerColor = gradient[gradientIdx] ?? colors.text.accent
 
   const cancelHint = onCancel ? '  (esc to cancel)' : ''

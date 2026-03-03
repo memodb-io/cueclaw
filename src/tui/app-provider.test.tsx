@@ -56,18 +56,19 @@ describe('appReducer', () => {
 
   it('handles ADD_MESSAGE', () => {
     const state = createInitialState()
-    const message = { type: 'user' as const, text: 'Hello' }
+    const message = { type: 'user' as const, text: 'Hello', id: 42 }
     const result = appReducer(state, { type: 'ADD_MESSAGE', message })
     expect(result.messages).toHaveLength(1)
-    expect(result.messages[0]).toBe(message)
+    expect(result.messages[0]!.type).toBe('user')
+    expect(result.messages[0]!.id).toBe(42)
   })
 
   it('handles SET_MESSAGES', () => {
     const state = {
       ...createInitialState(),
-      messages: [{ type: 'user' as const, text: 'old' }],
+      messages: [{ type: 'user' as const, text: 'old', id: 1 }],
     }
-    const messages = [{ type: 'assistant' as const, text: 'new' }]
+    const messages = [{ type: 'assistant' as const, text: 'new', id: 2 }]
     const result = appReducer(state, { type: 'SET_MESSAGES', messages })
     expect(result.messages).toBe(messages)
   })

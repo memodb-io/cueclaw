@@ -7,6 +7,8 @@ import type { DaemonBridge } from '../daemon-bridge.js'
 import { WorkflowTable } from '../renderers.js'
 import type Database from 'better-sqlite3'
 import type { View } from '../ui-state-context.js'
+import type { AppAction } from '../app-provider.js'
+import type { Dialog } from '../dialog-manager.js'
 
 interface UseGlobalKeypressOptions {
   isExecuting: boolean
@@ -15,9 +17,9 @@ interface UseGlobalKeypressOptions {
   db: Database.Database
   view: View
   exit: () => void
-  showDialog: (dialog: any) => void
+  showDialog: (dialog: Dialog) => void
   dismissDialog: () => void
-  dispatch: (action: any) => void
+  dispatch: (action: AppAction) => void
 }
 
 export function useGlobalKeypress({

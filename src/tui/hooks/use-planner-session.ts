@@ -8,8 +8,9 @@ import {
 import { logger } from '../../logger.js'
 import type { CueclawConfig } from '../../config.js'
 import type { ChatMessage } from '../ui-state-context.js'
+import type { AppAction } from '../app-provider.js'
 
-type Dispatch = (action: any) => void
+type Dispatch = (action: AppAction) => void
 
 export function usePlannerSession(
   config: CueclawConfig | null,

@@ -1,6 +1,7 @@
 import React from 'react'
 import { stopDaemonBridge, stopExternalDaemon, type DaemonBridge } from '../daemon-bridge.js'
 import { isDaemonRunning } from '../../daemon.js'
+import type { Dialog } from '../dialog-manager.js'
 
 let sessionStartTime: number | null = null
 
@@ -10,7 +11,7 @@ export function markSessionStart(): void {
 }
 
 /** Format a duration in ms to a human-readable string like "2m 15s" */
-export function formatDuration(ms: number): string {
+function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
@@ -45,7 +46,7 @@ export function stopBridgeAndExit(
 export function handleExit(options: {
   bridgeRef: React.RefObject<DaemonBridge | null>
   exit: () => void
-  showDialog: (dialog: any) => void
+  showDialog: (dialog: Dialog) => void
   dismissDialog: () => void
   isExecuting?: boolean
 }): void {

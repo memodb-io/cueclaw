@@ -14,9 +14,11 @@ export type ChatMessage =
   | { type: 'warning'; text: string }
   | { type: 'plan-ready'; workflowName: string }
 
+export type StoredMessage = ChatMessage & { id: number }
+
 export interface UIState {
   view: View
-  messages: ChatMessage[]
+  messages: StoredMessage[]
   workflow: Workflow | null
   isGenerating: boolean
   stepProgress: Map<string, StepProgress>

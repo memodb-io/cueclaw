@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { theme as colors } from './theme/index.js'
 import { useUIState } from './ui-state-context.js'
@@ -14,17 +14,7 @@ export function MainContent() {
   const { stdout } = useStdout()
   const rows = stdout?.rows ?? 24
 
-  // Scroll state (0 = bottom, positive = scrolled up by N messages)
   const [scrollOffset, setScrollOffset] = useState(0)
-  const prevMessageCountRef = useRef(messages.length)
-
-  // Auto-scroll to bottom on new messages when already at bottom
-  useEffect(() => {
-    if (messages.length > prevMessageCountRef.current && scrollOffset === 0) {
-      // Already at bottom, stay there
-    }
-    prevMessageCountRef.current = messages.length
-  }, [messages.length, scrollOffset])
 
   // Scroll keybindings: Ctrl+P up, Ctrl+N down
   const pageSize = Math.max(1, Math.floor(rows / 2))
@@ -61,8 +51,8 @@ export function MainContent() {
 
       {/* Messages */}
       <Box flexDirection="column" flexGrow={1} marginTop={hiddenAbove > 0 ? 0 : 1}>
-        {visibleMessages.map((msg, i) => (
-          <Box key={i} marginBottom={1} flexDirection="column">
+        {visibleMessages.map((msg) => (
+          <Box key={msg.id} marginBottom={1} flexDirection="column">
             <MessageDisplay message={msg} />
           </Box>
         ))}

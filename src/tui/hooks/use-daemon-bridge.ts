@@ -3,8 +3,9 @@ import { initDaemonBridge, stopDaemonBridge, type DaemonBridge } from '../daemon
 import { logger } from '../../logger.js'
 import type { CueclawConfig } from '../../config.js'
 import type Database from 'better-sqlite3'
+import type { AppAction } from '../app-provider.js'
 
-type Dispatch = (action: any) => void
+type Dispatch = (action: AppAction) => void
 
 export function useDaemonBridge(
   config: CueclawConfig | null,

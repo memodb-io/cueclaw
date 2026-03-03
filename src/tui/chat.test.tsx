@@ -4,11 +4,16 @@ import { render, cleanup } from 'ink-testing-library'
 import { ThemeProvider } from '@inkjs/ui'
 import { cueclawTheme } from './theme.js'
 import { KeypressProvider } from './use-keypress.js'
-import { Chat, type ChatMessage } from './chat.js'
-import { UIStateContext, type UIState } from './ui-state-context.js'
+import { Chat } from './chat.js'
+import { UIStateContext, type UIState, type StoredMessage, type ChatMessage } from './ui-state-context.js'
 import { UIActionsContext, type UIActions } from './ui-actions-context.js'
 
 afterEach(cleanup)
+
+let _msgId = 1
+function msg(body: ChatMessage): StoredMessage {
+  return { ...body, id: _msgId++ }
+}
 
 function createMockUIState(overrides: Partial<UIState> = {}): UIState {
   return {
@@ -80,37 +85,28 @@ describe('Chat component rendering', () => {
   })
 
   it('renders user messages with "You:" prefix', () => {
-    const messages: ChatMessage[] = [
-      { type: 'user', text: 'Hello world' },
-    ]
+    const messages = [msg({ type: 'user', text: 'Hello world' })]
     const { lastFrame } = renderChat({ messages })
     expect(lastFrame()!).toContain('Hello world')
     expect(lastFrame()!).toContain('>')
   })
 
   it('renders system messages without prefix', () => {
-    const messages: ChatMessage[] = [
-      { type: 'system', text: 'Daemon started.' },
-    ]
+    const messages = [msg({ type: 'system', text: 'Daemon started.' })]
     const { lastFrame } = renderChat({ messages })
     expect(lastFrame()!).toContain('Daemon started.')
   })
 
   it('renders assistant text messages with "CueClaw:" prefix', () => {
-    const messages: ChatMessage[] = [
-      { type: 'assistant', text: 'How can I help?' },
-    ]
+    const messages = [msg({ type: 'assistant', text: 'How can I help?' })]
     const { lastFrame } = renderChat({ messages })
     expect(lastFrame()!).toContain('How can I help?')
     expect(lastFrame()!).toContain('✦')
   })
 
   it('renders assistant messages with JSX content', () => {
-    const messages: ChatMessage[] = [
-      {
-        type: 'assistant-jsx',
-        content: React.createElement('ink-text', null, 'Custom content'),
-      },
+    const messages = [
+      msg({ type: 'assistant-jsx', content: React.createElement('ink-text', null, 'Custom content') }),
     ]
     const { lastFrame } = renderChat({ messages })
     const frame = lastFrame()!
@@ -119,34 +115,28 @@ describe('Chat component rendering', () => {
   })
 
   it('renders error messages', () => {
-    const messages: ChatMessage[] = [
-      { type: 'error', text: 'Something went wrong' },
-    ]
+    const messages = [msg({ type: 'error', text: 'Something went wrong' })]
     const { lastFrame } = renderChat({ messages })
     expect(lastFrame()!).toContain('Something went wrong')
   })
 
   it('renders warning messages', () => {
-    const messages: ChatMessage[] = [
-      { type: 'warning', text: 'Be careful' },
-    ]
+    const messages = [msg({ type: 'warning', text: 'Be careful' })]
     const { lastFrame } = renderChat({ messages })
     expect(lastFrame()!).toContain('Be careful')
   })
 
   it('renders plan-ready messages', () => {
-    const messages: ChatMessage[] = [
-      { type: 'plan-ready', workflowName: 'My Workflow' },
-    ]
+    const messages = [msg({ type: 'plan-ready', workflowName: 'My Workflow' })]
     const { lastFrame } = renderChat({ messages })
     expect(lastFrame()!).toContain('My Workflow')
   })
 
   it('renders multiple messages in order', () => {
-    const messages: ChatMessage[] = [
-      { type: 'user', text: 'First' },
-      { type: 'assistant', text: 'Second' },
-      { type: 'system', text: 'Third' },
+    const messages = [
+      msg({ type: 'user', text: 'First' }),
+      msg({ type: 'assistant', text: 'Second' }),
+      msg({ type: 'system', text: 'Third' }),
     ]
     const { lastFrame } = renderChat({ messages })
     const frame = lastFrame()!
@@ -209,9 +199,7 @@ describe('Chat component rendering', () => {
   })
 
   it('does not show scroll indicator when all messages visible', () => {
-    const messages: ChatMessage[] = [
-      { type: 'user', text: 'Hello' },
-    ]
+    const messages = [msg({ type: 'user', text: 'Hello' })]
     const { lastFrame } = renderChat({ messages })
     expect(lastFrame()!).not.toContain('more message')
   })

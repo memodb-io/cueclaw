@@ -38,8 +38,13 @@ const KeypressContext = createContext<KeypressContextValue | null>(null)
 export function KeypressProvider({ children }: { children: React.ReactNode }) {
   const handlersRef = useRef<HandlerEntry[]>([])
 
+  const sortHandlers = () => {
+    handlersRef.current.sort((a, b) => b.priority - a.priority)
+  }
+
   const register = useCallback((entry: HandlerEntry) => {
     handlersRef.current = [...handlersRef.current.filter(h => h.id !== entry.id), entry]
+    sortHandlers()
   }, [])
 
   const unregister = useCallback((id: string) => {
@@ -52,14 +57,9 @@ export function KeypressProvider({ children }: { children: React.ReactNode }) {
     )
   }, [])
 
-  // Single top-level useInput that dispatches to registered handlers
   useInput((input, key) => {
-    // Sort by priority descending
-    const sorted = [...handlersRef.current]
-      .filter(h => h.isActive)
-      .sort((a, b) => b.priority - a.priority)
-
-    for (const entry of sorted) {
+    for (const entry of handlersRef.current) {
+      if (!entry.isActive) continue
       const consumed = entry.handler(input, key)
       if (consumed === true) break
     }

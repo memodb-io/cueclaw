@@ -62,7 +62,7 @@ export function ResettableInput({ placeholder, onSubmit, onChange, isDisabled, o
   })
 
   useKeypress('resettable-input', KeyPriority.Normal, useCallback((input, key) => {
-    if ((key.ctrl && input === 'c') || key.tab || (key.shift && key.tab)) return false
+    if ((key.ctrl && input === 'c') || key.tab || (key.shift && key.tab) || key.escape) return false
     if (key.upArrow) {
       if (onUpArrow) {
         const entry = onUpArrow(state.value)
