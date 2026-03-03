@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Box, Text } from 'ink'
-import type { Workflow, WorkflowRun, StepRun, WorkflowPhase } from '../types.js'
+import type { Workflow, WorkflowRun, StepRun } from '../types.js'
 import { useKeypress, KeyPriority } from './use-keypress.js'
 import { theme as colors } from './theme/index.js'
 import { keyBindings } from './key-bindings.js'
+import { stepStatusIcon, stepStatusColor, phaseColor, runStatusColor, formatDuration, formatTrigger } from './format-utils.js'
 
 interface WorkflowDetailViewProps {
   workflow: Workflow
@@ -73,8 +74,8 @@ export function WorkflowDetailView({ workflow, runs, latestStepRuns, onBack, onS
         {workflow.steps.map((step, i) => {
           const deps = step.depends_on.length > 0 ? ` → depends on: ${step.depends_on.join(', ')}` : ''
           const stepRun = latestStepRuns.find(sr => sr.step_id === step.id)
-          const icon = stepRun ? statusIcon(stepRun.status) : '○'
-          const iconColor = stepRun ? statusColor(stepRun.status) : colors.status.muted
+          const icon = stepRun ? stepStatusIcon(stepRun.status) : '○'
+          const iconColor = stepRun ? stepStatusColor(stepRun.status) : colors.status.muted
           return (
             <Box key={step.id}>
               <Text color={iconColor}>{icon} </Text>
@@ -123,56 +124,3 @@ export function WorkflowDetailView({ workflow, runs, latestStepRuns, onBack, onS
   )
 }
 
-function phaseColor(phase: WorkflowPhase): string {
-  switch (phase) {
-    case 'executing': return colors.status.warning
-    case 'active': return colors.status.success
-    case 'completed': return colors.status.success
-    case 'failed': return colors.status.error
-    case 'paused': return colors.status.muted
-    default: return colors.text.primary
-  }
-}
-
-function runStatusColor(status: WorkflowRun['status']): string {
-  switch (status) {
-    case 'completed': return colors.status.success
-    case 'running': return colors.status.warning
-    case 'failed': return colors.status.error
-    default: return colors.text.primary
-  }
-}
-
-function statusIcon(status: string): string {
-  switch (status) {
-    case 'succeeded': return '✓'
-    case 'running': return '⊷'
-    case 'failed': return '✗'
-    case 'skipped': return '○'
-    default: return '○'
-  }
-}
-
-function statusColor(status: string): string {
-  switch (status) {
-    case 'succeeded': return colors.status.success
-    case 'running': return colors.status.warning
-    case 'failed': return colors.status.error
-    case 'skipped': return colors.status.muted
-    default: return colors.status.muted
-  }
-}
-
-function formatTrigger(trigger: Workflow['trigger']): string {
-  switch (trigger.type) {
-    case 'poll': return `poll every ${trigger.interval_seconds}s (${trigger.diff_mode})`
-    case 'cron': return `cron: ${trigger.expression}${trigger.timezone ? ` (${trigger.timezone})` : ''}`
-    case 'manual': return 'manual'
-  }
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${Math.round(ms / 1000)}s`
-  return `${Math.round(ms / 60000)}m`
-}

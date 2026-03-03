@@ -5,6 +5,7 @@ import { useKeypress, KeyPriority } from './use-keypress.js'
 import { theme as colors } from './theme/index.js'
 import { keyBindings } from './key-bindings.js'
 import { useUIState } from './ui-state-context.js'
+import { stepStatusIcon, stepStatusColor, formatDuration } from './format-utils.js'
 
 interface StepProgress {
   stepId: string
@@ -22,7 +23,6 @@ interface ExecutionViewProps {
 
 export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort }: ExecutionViewProps) {
   const { isExecuting } = useUIState()
-  // Local isRunning for display only (shows "Running" while any step has running status)
   const isRunning = Array.from(stepProgress.values()).some(s => s.status === 'running')
 
   useKeypress('execution-view-actions', KeyPriority.Normal, useCallback((input, key) => {
@@ -39,7 +39,6 @@ export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort 
 
   return (
     <Box flexDirection="column" paddingX={1} flexGrow={1}>
-      {/* Content area — grows to push actions to bottom */}
       <Box flexDirection="column" flexGrow={1}>
         <Box justifyContent="space-between">
           <Text color={colors.border.accent} bold>Workflow: {workflow.name}</Text>
@@ -51,12 +50,12 @@ export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort 
         {workflow.steps.map((step, i) => {
           const progress = stepProgress.get(step.id)
           const status = progress?.status ?? 'pending'
-          const icon = statusIcon(status)
+          const icon = stepStatusIcon(status)
           const durationText = progress?.duration ? ` (${formatDuration(progress.duration)})` : ''
 
           return (
             <Box key={step.id}>
-              <Text color={statusColor(status)}>
+              <Text color={stepStatusColor(status)}>
                 {icon} {i + 1}. {step.description}{durationText}
               </Text>
             </Box>
@@ -73,7 +72,6 @@ export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort 
         )}
       </Box>
 
-      {/* Actions — pinned to bottom */}
       <Box marginTop={1}>
         <Text color={colors.ui.comment}>
           {isExecuting ? 'Press [X] to cancel' : 'Press Enter, Q, or Esc to return to chat'}
@@ -81,31 +79,6 @@ export function ExecutionView({ workflow, stepProgress, output, onBack, onAbort 
       </Box>
     </Box>
   )
-}
-
-function statusIcon(status: StepStatus): string {
-  switch (status) {
-    case 'succeeded': return '✓'
-    case 'running': return '⊷'
-    case 'failed': return '✗'
-    case 'skipped': return '○'
-    default: return '○'
-  }
-}
-
-function statusColor(status: StepStatus): string {
-  switch (status) {
-    case 'succeeded': return colors.status.success
-    case 'running': return colors.status.warning
-    case 'failed': return colors.status.error
-    case 'skipped': return colors.status.muted
-    default: return colors.status.muted
-  }
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  return `${Math.round(ms / 1000)}s`
 }
 
 export type { StepProgress }

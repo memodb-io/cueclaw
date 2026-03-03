@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Box, Text } from 'ink'
-import type { Workflow, WorkflowPhase } from '../types.js'
+import type { Workflow } from '../types.js'
 import { useKeypress, KeyPriority } from './use-keypress.js'
 import { theme as colors } from './theme/index.js'
 import { keyBindings } from './key-bindings.js'
+import { phaseColor } from './format-utils.js'
 
 interface StatusProps {
   workflows: Workflow[]
@@ -74,17 +75,6 @@ export function Status({ workflows, onSelect, onBack, onStop, onDelete }: Status
     if (keyBindings.escape(input, key) || keyBindings.quit(input, key)) { onBack(); return true }
     return false
   }, [confirm, message, selectedIndex, workflows, onSelect, onBack, onStop, onDelete]))
-
-  const phaseColor = (phase: WorkflowPhase): string => {
-    switch (phase) {
-      case 'executing': return colors.status.warning
-      case 'active': return colors.status.success
-      case 'completed': return colors.status.success
-      case 'failed': return colors.status.error
-      case 'paused': return colors.status.muted
-      default: return colors.text.primary
-    }
-  }
 
   return (
     <Box flexDirection="column" paddingX={1} flexGrow={1}>
