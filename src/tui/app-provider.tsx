@@ -127,7 +127,7 @@ export function AppProvider({ cwd, skipOnboarding, children }: AppProviderProps)
 
   // Custom hooks
   const { bridgeRef, daemonStatus } = useDaemonBridge(config, db, cwd, dispatch)
-  const planner = usePlannerSession(config, dispatch, state.streamingText)
+  const planner = usePlannerSession(config, dispatch)
   const execution = useWorkflowExecution(
     state.workflow, db, cwd, bridgeRef, planner.plannerSessionRef, dispatch,
   )

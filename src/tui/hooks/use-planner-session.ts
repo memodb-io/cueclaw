@@ -14,7 +14,6 @@ type Dispatch = (action: any) => void
 export function usePlannerSession(
   config: CueclawConfig | null,
   dispatch: Dispatch,
-  streamingText: string,
 ) {
   const plannerSessionRef = useRef<PlannerSession | null>(null)
 
@@ -28,28 +27,26 @@ export function usePlannerSession(
     try {
       let result: { session: PlannerSession; turn: import('../../planner-session.js').PlannerTurn }
 
+      let accumulated = ''
+      const onToken = (token: string) => {
+        accumulated += token
+        dispatch({ type: 'SET_STREAMING_TEXT', text: accumulated })
+      }
+
       const tuiContext = { channel: 'tui' as const }
       if (plannerSessionRef.current && plannerSessionRef.current.status === 'conversing') {
         result = await continuePlannerSession(
           plannerSessionRef.current,
           text,
           config,
-          {
-            onToken: (token) => {
-              dispatch({ type: 'SET_STREAMING_TEXT', text: (streamingText || '') + token })
-            },
-          },
+          { onToken },
           tuiContext,
         )
       } else {
         result = await startPlannerSession(
           text,
           config,
-          {
-            onToken: (token) => {
-              dispatch({ type: 'SET_STREAMING_TEXT', text: (streamingText || '') + token })
-            },
-          },
+          { onToken },
           tuiContext,
         )
       }
@@ -90,7 +87,7 @@ export function usePlannerSession(
       plannerSessionRef.current = null
       logger.error({ err }, 'Planner session failed')
     }
-  }, [config, streamingText])
+  }, [config])
 
   const handleCancelGeneration = useCallback(() => {
     if (plannerSessionRef.current) {

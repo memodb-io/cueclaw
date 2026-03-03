@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeypress, KeyPriority } from './use-keypress.js'
 import { keyBindings } from './key-bindings.js'
@@ -53,6 +53,11 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
   const cols = stdout?.columns ?? 80
 
   const existing = useMemo<ExistingConfig>(() => loadExistingConfig(), [])
+  const completeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => { if (completeTimerRef.current) clearTimeout(completeTimerRef.current) }
+  }, [])
 
   // Fix-it mode: determine initial step based on issues
   const initialStep = useMemo<OnboardingStep>(() => {
@@ -82,6 +87,7 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
 
   useKeypress('onboarding-cancel', KeyPriority.Normal, useCallback((input, key) => {
     if (onCancel && keyBindings.escape(input, key)) {
+      if (completeTimerRef.current) clearTimeout(completeTimerRef.current)
       onCancel()
       return true
     }
@@ -269,7 +275,7 @@ export function Onboarding({ onComplete, onCancel, issues }: OnboardingProps) {
 
     const config = loadConfig()
     setStep('done')
-    setTimeout(() => onComplete(config), 1500)
+    completeTimerRef.current = setTimeout(() => onComplete(config), 1500)
   }, [onComplete])
 
   // ─── Render ───

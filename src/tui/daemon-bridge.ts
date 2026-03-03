@@ -190,8 +190,12 @@ export async function stopDaemonBridge(bridge: DaemonBridge): Promise<void> {
 export function stopExternalDaemon(): void {
   const pid = readPidFile()
   if (pid && isProcessAlive(pid)) {
-    process.kill(pid, 'SIGTERM')
+    try {
+      process.kill(pid, 'SIGTERM')
+      logger.info({ pid }, 'Stopped external daemon')
+    } catch (err) {
+      logger.warn({ err, pid }, 'Failed to stop external daemon')
+    }
     removePidFile()
-    logger.info({ pid }, 'Stopped external daemon')
   }
 }

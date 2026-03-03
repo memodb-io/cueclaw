@@ -29,7 +29,9 @@ export function useDaemonBridge(
 
     initDaemonBridge(db, config, cwd, { skipBots: !hasConfiguredBots }).then(bridge => {
       if (cancelled) {
-        stopDaemonBridge(bridge)
+        stopDaemonBridge(bridge).catch(err => {
+          logger.error({ err }, 'Failed to stop daemon bridge after cancellation')
+        })
         return
       }
       bridgeRef.current = bridge
@@ -67,7 +69,9 @@ export function useDaemonBridge(
     return () => {
       cancelled = true
       if (bridgeRef.current) {
-        stopDaemonBridge(bridgeRef.current)
+        stopDaemonBridge(bridgeRef.current).catch(err => {
+          logger.error({ err }, 'Failed to stop daemon bridge during cleanup')
+        })
         bridgeRef.current = null
       }
     }

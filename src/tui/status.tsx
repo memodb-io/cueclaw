@@ -21,6 +21,12 @@ export function Status({ workflows, onSelect, onBack, onStop, onDelete }: Status
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
+    if (selectedIndex >= workflows.length && workflows.length > 0) {
+      setSelectedIndex(workflows.length - 1)
+    }
+  }, [workflows.length, selectedIndex])
+
+  useEffect(() => {
     if (!message) return
     const timer = setTimeout(() => setMessage(null), 3000)
     return () => clearTimeout(timer)

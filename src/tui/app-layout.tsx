@@ -24,7 +24,7 @@ export function AppLayout({ cwd }: { cwd: string }) {
   const configIssues = useMemo(() => {
     const validation = validateConfig()
     return validation.issues.filter(i => i.severity === 'error')
-  }, [])
+  }, [config])
 
   return (
     <Box flexDirection="column" height={rows}>

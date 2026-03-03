@@ -113,7 +113,11 @@ export function useWorkflowExecution(
   const handleCancel = useCallback(() => {
     if (workflow) {
       const rejected = rejectPlan(workflow)
-      updateWorkflowPhase(db, workflow.id, rejected.phase)
+      try {
+        updateWorkflowPhase(db, workflow.id, rejected.phase)
+      } catch (err) {
+        logger.error({ err }, 'Failed to update workflow phase')
+      }
     }
     if (plannerSessionRef.current) {
       (plannerSessionRef as React.MutableRefObject<PlannerSession | null>).current = null

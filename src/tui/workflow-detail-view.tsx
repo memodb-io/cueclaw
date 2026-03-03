@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Box, Text } from 'ink'
 import type { Workflow, WorkflowRun, StepRun, WorkflowPhase } from '../types.js'
 import { useKeypress, KeyPriority } from './use-keypress.js'
@@ -17,6 +17,12 @@ interface WorkflowDetailViewProps {
 export function WorkflowDetailView({ workflow, runs, latestStepRuns, onBack, onSelectRun, onStop }: WorkflowDetailViewProps) {
   const [selectedRunIndex, setSelectedRunIndex] = useState(0)
   const displayRuns = runs.slice(0, 5)
+
+  useEffect(() => {
+    if (selectedRunIndex >= displayRuns.length && displayRuns.length > 0) {
+      setSelectedRunIndex(displayRuns.length - 1)
+    }
+  }, [displayRuns.length, selectedRunIndex])
 
   useKeypress('detail-view-actions', KeyPriority.Normal, useCallback((input, key) => {
     if (keyBindings.escape(input, key) || keyBindings.quit(input, key)) {
